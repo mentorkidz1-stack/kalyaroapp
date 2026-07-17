@@ -1,4 +1,4 @@
-import type { TentativeEleve, Notion, QuestionQcm } from "@prisma/client";
+import { Prisma, type TentativeEleve, type Notion, type QuestionQcm } from "@prisma/client";
 import {
   reformulateQuestion,
   generateSummarySheet,
@@ -225,6 +225,22 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
   const payload = verifyQcmAttemptToken(attemptToken);
   if (payload.eleveId !== eleveId) throw new AppError("Ce jeton n'appartient pas à cet élève", 403);
 
+  // Anti-rejeu : un attemptToken valide capturé (devtools) ne doit pouvoir compter qu'une
+  // seule fois, sinon rejouer un token après une bonne réponse permettrait d'incrémenter
+  // artificiellement nbSuccesConsecutifs jusqu'à MAITRISE sans répondre à de vraies
+  // questions distinctes. L'insertion échoue sur la contrainte de clé primaire (jti) si
+  // le jeton a déjà été consommé — atomique, pas de fenêtre de course possible.
+  try {
+    await prisma.consumedAttemptToken.create({
+      data: { jti: payload.jti, expiresAt: new Date(payload.exp) },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new AppError("Cette question a déjà été répondue.", 409);
+    }
+    throw err;
+  }
+
   const correcte = reponseDonnee === payload.bonneReponse;
 
   const previousAttemptsCount = await prisma.tentativeEleve.count({
@@ -343,7 +359,7 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     }
   }
 
-  return { correcte, statutNotion: statut, ficheResume, questionMetacognitive, indice };
+  return { tentativeId: tentative.id, correcte, statutNotion: statut, ficheResume, questionMetacognitive, indice };
 };
 
 // ---- Saisie libre (débloquée après maîtrise) ----
@@ -630,7 +646,7 @@ export const submitEpreuve = async (eleveId: string, epreuveId: string, reponseD
   return { valide: false, explication, diagnostic };
 };
 
-export const advanceDiagnostic = async (eleveId: string, diagnosticId: string, correcte: boolean) => {
+export const advanceDiagnostic = async (eleveId: string, diagnosticId: string, tentativeId: string) => {
   const diagnostic = await prisma.diagnosticPrerequis.findUnique({ where: { id: diagnosticId } });
   if (!diagnostic || diagnostic.eleveId !== eleveId) throw new AppError("Diagnostic introuvable", 404);
   if (diagnostic.resolu) throw new AppError("Ce diagnostic est déjà résolu", 400);
@@ -639,6 +655,38 @@ export const advanceDiagnostic = async (eleveId: string, diagnosticId: string, c
   if (chemin.weakNotionId) {
     throw new AppError("Le niveau faible a déjà été identifié pour ce diagnostic", 400);
   }
+
+  // Le verdict vient exclusivement de la tentative QCM vérifiée serveur (submitQcmAnswer),
+  // jamais d'un booléen envoyé par le client : sinon n'importe quel appel avec
+  // {"correcte": true} piloterait la descente du graphe sans avoir répondu à rien.
+  const tentative = await prisma.tentativeEleve.findUnique({
+    where: { id: tentativeId },
+    include: { questionQcm: { include: { notions: true } } },
+  });
+  if (!tentative || tentative.eleveId !== eleveId) {
+    throw new AppError("Tentative introuvable", 404);
+  }
+  if (tentative.typeCible !== "QCM" || !tentative.questionQcm) {
+    throw new AppError("Cette tentative ne correspond pas à une question QCM", 400);
+  }
+  const testeeMatches = tentative.questionQcm.notions.some(
+    (link) => link.notionId === diagnostic.notionPrerequisTesteeId
+  );
+  if (!testeeMatches) {
+    throw new AppError("Cette tentative ne correspond pas au prérequis actuellement sondé", 400);
+  }
+
+  // Réclamation atomique : si `usedForDiagnosticAt` n'est plus null, la tentative a déjà
+  // servi à faire avancer un diagnostic (celui-ci ou un autre) et ne peut pas être réutilisée.
+  const claim = await prisma.tentativeEleve.updateMany({
+    where: { id: tentativeId, usedForDiagnosticAt: null },
+    data: { usedForDiagnosticAt: new Date() },
+  });
+  if (claim.count === 0) {
+    throw new AppError("Cette tentative a déjà été utilisée pour faire avancer un diagnostic", 409);
+  }
+
+  const correcte = tentative.correcte === true;
 
   const testee = await prisma.notion.findUniqueOrThrow({ where: { id: diagnostic.notionPrerequisTesteeId } });
   const previousLevelId = chemin.path[chemin.path.length - 1]!.notionId;

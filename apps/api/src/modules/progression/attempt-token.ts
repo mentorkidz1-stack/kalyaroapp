@@ -11,6 +11,7 @@ import { AppError } from "../../plugins/error-handler.js";
 // (string en entrée/sortie) identique pour les appelants.
 export interface QcmAttemptTokenPayload {
   type: "qcm_attempt";
+  jti: string;
   eleveId: string;
   notionId: string;
   questionQcmId: string;
@@ -30,8 +31,9 @@ function base64url(buf: Buffer): string {
   return buf.toString("base64url");
 }
 
-export function signQcmAttemptToken(payload: Omit<QcmAttemptTokenPayload, "type">): string {
-  const body = JSON.stringify({ ...payload, type: "qcm_attempt", exp: Date.now() + TOKEN_TTL_MS });
+export function signQcmAttemptToken(payload: Omit<QcmAttemptTokenPayload, "type" | "jti">): string {
+  const jti = randomBytes(16).toString("base64url");
+  const body = JSON.stringify({ ...payload, type: "qcm_attempt", jti, exp: Date.now() + TOKEN_TTL_MS });
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", getKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(body, "utf8"), cipher.final()]);
@@ -39,7 +41,7 @@ export function signQcmAttemptToken(payload: Omit<QcmAttemptTokenPayload, "type"
   return `${base64url(iv)}.${base64url(tag)}.${base64url(ciphertext)}`;
 }
 
-export function verifyQcmAttemptToken(token: string): QcmAttemptTokenPayload {
+export function verifyQcmAttemptToken(token: string): QcmAttemptTokenPayload & { exp: number } {
   const parts = token.split(".");
   if (parts.length !== 3 || parts.some((p) => !p)) {
     throw new AppError("Jeton de tentative invalide", 400);

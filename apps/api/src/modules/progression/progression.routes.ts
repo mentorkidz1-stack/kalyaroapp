@@ -85,7 +85,7 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
 
   fastify.post("/diagnostic/:id/avancer", async (request) => {
     const { id } = diagnosticIdParamSchema.parse(request.params);
-    const { correcte } = advanceDiagnosticSchema.parse(request.body);
-    return progressionService.advanceDiagnostic(request.user.id, id, correcte);
+    const { tentativeId } = advanceDiagnosticSchema.parse(request.body);
+    return progressionService.advanceDiagnostic(request.user.id, id, tentativeId);
   });
 }

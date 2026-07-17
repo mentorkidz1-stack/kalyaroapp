@@ -447,10 +447,25 @@ model TentativeEleve {
   evaluationIa          Json?              @map("evaluation_ia")
   tentativeNumero       Int                @default(1) @map("tentative_numero")
   createdAt             DateTime           @default(now()) @map("created_at")
+  /// Horodatage de consommation par advanceDiagnostic — empêche qu'une même tentative
+  /// QCM (vérifiée serveur) serve à faire avancer le graphe de prérequis plusieurs fois.
+  usedForDiagnosticAt   DateTime?          @map("used_for_diagnostic_at")
 
   reponsesMetacognitives ReponseMetacognitive[]
 
   @@map("tentatives_eleve")
+}
+
+/// Trace anti-rejeu pour les attemptToken QCM (voir attempt-token.ts) : chaque jeton
+/// signé porte un jti unique, inséré ici lors de sa première consommation dans
+/// submitQcmAnswer. Une deuxième soumission du même jeton échoue sur la contrainte
+/// de clé primaire plutôt que de recréer silencieusement une tentative.
+model ConsumedAttemptToken {
+  jti       String   @id
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("consumed_attempt_tokens")
 }
 
 model ProgressionNotion {

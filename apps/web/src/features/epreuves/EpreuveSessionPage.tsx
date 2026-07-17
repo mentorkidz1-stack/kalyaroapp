@@ -177,11 +177,12 @@ function SondagePhase({
   const submitQcm = useSubmitQcm();
   const [selected, setSelected] = useState<string | null>(null);
   const [correcte, setCorrecte] = useState<boolean | null>(null);
+  const [tentativeId, setTentativeId] = useState<string | null>(null);
   const [phaseError, setPhaseError] = useState<string | null>(null);
 
   const advance = useMutation({
-    mutationFn: (correcte: boolean) =>
-      api.post<AdvanceDiagnosticResult>(`/api/eleve/diagnostic/${diagnosticId}/avancer`, { correcte }),
+    mutationFn: (tentativeId: string) =>
+      api.post<AdvanceDiagnosticResult>(`/api/eleve/diagnostic/${diagnosticId}/avancer`, { tentativeId }),
     onSuccess: (data) => onAdvance(data),
     onError: () => setPhaseError("Impossible de continuer. Réessaie."),
   });
@@ -193,7 +194,10 @@ function SondagePhase({
     submitQcm.mutate(
       { attemptToken: question.attemptToken, reponseDonnee: choix },
       {
-        onSuccess: (result) => setCorrecte(result.correcte),
+        onSuccess: (result) => {
+          setCorrecte(result.correcte);
+          setTentativeId(result.tentativeId);
+        },
         onError: () => {
           setSelected(null);
           setPhaseError("Ta réponse n'a pas pu être envoyée. Réessaie.");
@@ -235,9 +239,9 @@ function SondagePhase({
               <ErrorState message={phaseError} />
             </div>
           )}
-          {correcte !== null && (
+          {tentativeId !== null && (
             <div className="mt-4">
-              <Button onClick={() => advance.mutate(correcte)} disabled={advance.isPending}>
+              <Button onClick={() => advance.mutate(tentativeId)} disabled={advance.isPending}>
                 {advance.isPending ? "Analyse…" : "Continuer →"}
               </Button>
             </div>

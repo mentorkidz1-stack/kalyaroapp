@@ -18,6 +18,7 @@ export interface QuestionMetacognitive {
   tentativeId: string;
 }
 export interface RepondreResult {
+  tentativeId: string;
   correcte: boolean;
   statutNotion: "NON_VU" | "FRAGILE" | "MAITRISE";
   ficheResume: FicheResume | null;
