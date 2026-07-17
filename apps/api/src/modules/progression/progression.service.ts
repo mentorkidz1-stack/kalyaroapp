@@ -156,7 +156,9 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
   const pool = await prisma.questionQcm.findMany({
     where: { statut: "PUBLIE", notions: { some: { notionId } } },
   });
-  if (pool.length === 0) throw new AppError("Aucune question QCM publiée pour cette notion", 404);
+  // Absence de contenu, pas une erreur : le frontend affiche un état "aucune question
+  // disponible" dédié plutôt qu'un écran d'erreur avec un bouton Réessayer inutile.
+  if (pool.length === 0) return null;
 
   const excludeId = lastAttempt?.questionQcmId ?? null;
   const candidates = pool.filter((q) => q.id !== excludeId);
@@ -298,30 +300,47 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     },
   });
 
+  // La tentative et la progression sont déjà persistées à ce stade. Les trois appels IA
+  // ci-dessous sont des enrichissements de la réponse (fiche résumé, question méta,
+  // indice) : si l'un d'eux échoue (quota IA, réseau...), on ne doit ni faire échouer
+  // toute la requête ni la faire remonter en erreur côté élève — celui-ci recliquerait
+  // sur le même choix et créerait une deuxième tentative fantôme pour la même réponse.
   let ficheResume = null;
   if (!correcte && nbEchecs >= FICHE_RESUME_FAILURE_THRESHOLD) {
-    ficheResume = await generateFicheResumeIfNeeded(payload.notionId);
+    try {
+      ficheResume = await generateFicheResumeIfNeeded(payload.notionId);
+    } catch {
+      ficheResume = null;
+    }
   }
 
   let questionMetacognitive = null;
   if (tentative.tentativeNumero % METACOGNITIVE_EVERY_N_ATTEMPTS === 0) {
-    questionMetacognitive = await createMetacognitiveQuestion(tentative, payload);
+    try {
+      questionMetacognitive = await createMetacognitiveQuestion(tentative, payload);
+    } catch {
+      questionMetacognitive = null;
+    }
   }
 
   let indice: string | null = null;
-  if (!correcte && nbEchecs === 1) {
-    // On utilise l'énoncé/les choix embarqués dans le jeton (ce que l'élève a réellement
-    // vu à l'écran), pas la question originale en base : si elle a été reformulée par
-    // l'IA, les valeurs numériques diffèrent et un indice basé sur la version d'origine
-    // induirait l'élève en erreur.
-    const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId } });
-    const explanation = await explainQcmAnswer({
-      notionNom: notion.nom,
-      question: payload.enonce,
-      choix: payload.choix,
-      reponseDonnee,
-    });
-    indice = explanation.indice;
+  if (!correcte) {
+    try {
+      // On utilise l'énoncé/les choix embarqués dans le jeton (ce que l'élève a réellement
+      // vu à l'écran), pas la question originale en base : si elle a été reformulée par
+      // l'IA, les valeurs numériques diffèrent et un indice basé sur la version d'origine
+      // induirait l'élève en erreur.
+      const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId } });
+      const explanation = await explainQcmAnswer({
+        notionNom: notion.nom,
+        question: payload.enonce,
+        choix: payload.choix,
+        reponseDonnee,
+      });
+      indice = explanation.indice;
+    } catch {
+      indice = null;
+    }
   }
 
   return { correcte, statutNotion: statut, ficheResume, questionMetacognitive, indice };
