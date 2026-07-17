@@ -11,6 +11,18 @@ interface MatiereScolaire {
   id: string;
   nom: string;
 }
+interface Filiere {
+  id: string;
+  nom: string;
+}
+interface NiveauUniversitaire {
+  id: string;
+  nom: string;
+}
+interface UEMatiere {
+  id: string;
+  nom: string;
+}
 interface Evaluation {
   id: string;
   titre: string;
@@ -20,56 +32,155 @@ interface Evaluation {
 }
 
 export function EvaluationsPage() {
+  const [type, setType] = useState<"SCOLAIRE" | "UNIVERSITAIRE">("SCOLAIRE");
   const [classeId, setClasseId] = useState("");
-  const [matiereId, setMatiereId] = useState("");
+  const [matiereScolaireId, setMatiereScolaireId] = useState("");
+  const [filiereId, setFiliereId] = useState("");
+  const [niveauId, setNiveauId] = useState("");
+  const [ueId, setUeId] = useState("");
 
   const { data: classes } = useQuery({
     queryKey: ["classes"],
     queryFn: () => api.get<Classe[]>("/api/structure/classes"),
+    enabled: type === "SCOLAIRE",
   });
-  const { data: matieres } = useQuery({
+  const { data: matieresScolaires } = useQuery({
     queryKey: ["matieres-scolaires", classeId],
     queryFn: () => api.get<MatiereScolaire[]>(`/api/structure/classes/${classeId}/matieres`),
     enabled: !!classeId,
   });
+  const { data: filieres } = useQuery({
+    queryKey: ["filieres"],
+    queryFn: () => api.get<Filiere[]>("/api/structure/filieres"),
+    enabled: type === "UNIVERSITAIRE",
+  });
+  const { data: niveaux } = useQuery({
+    queryKey: ["niveaux", filiereId],
+    queryFn: () => api.get<NiveauUniversitaire[]>(`/api/structure/filieres/${filiereId}/niveaux`),
+    enabled: !!filiereId,
+  });
+  const { data: ues } = useQuery({
+    queryKey: ["ue-matieres", niveauId],
+    queryFn: () => api.get<UEMatiere[]>(`/api/structure/niveaux/${niveauId}/ue-matieres`),
+    enabled: !!niveauId,
+  });
+
+  const matiereId = type === "SCOLAIRE" ? matiereScolaireId : ueId;
 
   return (
     <div className="space-y-6">
       <h1 className="font-display font-extrabold text-xl text-ink">Évaluations</h1>
 
       <Card>
-        <div className="flex gap-2 items-end">
-          <FormField label="Classe">
-            <select
-              className={fieldInputClass}
-              value={classeId}
-              onChange={(e) => {
-                setClasseId(e.target.value);
-                setMatiereId("");
-              }}
-            >
-              <option value="">—</option>
-              {classes?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nom}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Matière">
-            <select className={fieldInputClass} value={matiereId} onChange={(e) => setMatiereId(e.target.value)}>
-              <option value="">—</option>
-              {matieres?.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.nom}
-                </option>
-              ))}
-            </select>
-          </FormField>
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => setType("SCOLAIRE")}
+            className={`px-3 py-2 rounded-[10px] border-2 text-sm font-bold ${
+              type === "SCOLAIRE" ? "border-primary bg-primary-tint text-primary-deep" : "border-line text-ink-soft"
+            }`}
+          >
+            Scolaire
+          </button>
+          <button
+            type="button"
+            onClick={() => setType("UNIVERSITAIRE")}
+            className={`px-3 py-2 rounded-[10px] border-2 text-sm font-bold ${
+              type === "UNIVERSITAIRE"
+                ? "border-accent bg-accent-tint text-[#8A5A0E]"
+                : "border-line text-ink-soft"
+            }`}
+          >
+            Universitaire
+          </button>
         </div>
+
+        {type === "SCOLAIRE" ? (
+          <div className="flex gap-2 items-end">
+            <FormField label="Classe">
+              <select
+                className={fieldInputClass}
+                value={classeId}
+                onChange={(e) => {
+                  setClasseId(e.target.value);
+                  setMatiereScolaireId("");
+                }}
+              >
+                <option value="">—</option>
+                {classes?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Matière">
+              <select
+                className={fieldInputClass}
+                value={matiereScolaireId}
+                onChange={(e) => setMatiereScolaireId(e.target.value)}
+              >
+                <option value="">—</option>
+                {matieresScolaires?.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nom}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </div>
+        ) : (
+          <div className="flex gap-2 items-end">
+            <FormField label="Filière">
+              <select
+                className={fieldInputClass}
+                value={filiereId}
+                onChange={(e) => {
+                  setFiliereId(e.target.value);
+                  setNiveauId("");
+                  setUeId("");
+                }}
+              >
+                <option value="">—</option>
+                {filieres?.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nom}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Niveau">
+              <select
+                className={fieldInputClass}
+                value={niveauId}
+                onChange={(e) => {
+                  setNiveauId(e.target.value);
+                  setUeId("");
+                }}
+              >
+                <option value="">—</option>
+                {niveaux?.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.nom}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="UE">
+              <select className={fieldInputClass} value={ueId} onChange={(e) => setUeId(e.target.value)}>
+                <option value="">—</option>
+                {ues?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nom}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </div>
+        )}
       </Card>
 
-      {matiereId && <EvaluationsForMatiere matiereId={matiereId} />}
+      {matiereId && <EvaluationsForMatiere key={matiereId} matiereId={matiereId} />}
     </div>
   );
 }
