@@ -1,0 +1,20 @@
+{
+  "name": "kalyaro",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Kalyaro — PWA d'apprentissage adaptatif (scolaire & universitaire) pour le Bénin",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "npm run dev --workspace apps/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace apps/api",
+    "prisma:seed": "npm run prisma:seed --workspace apps/api",
+    "prisma:studio": "npm run prisma:studio --workspace apps/api"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

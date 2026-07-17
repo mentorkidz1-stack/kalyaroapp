@@ -1,0 +1,598 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum TypeParcours {
+  SCOLAIRE
+  UNIVERSITAIRE
+}
+
+enum Role {
+  ADMIN
+  ELEVE
+  ETUDIANT
+}
+
+enum NiveauUniv {
+  L1
+  L2
+  L3
+  M1
+  M2
+}
+
+enum StatutExtraction {
+  PENDING
+  DONE
+  ERROR
+}
+
+enum StatutPrerequis {
+  PROPOSE_IA
+  VALIDE_ADMIN
+}
+
+enum SourceQuestion {
+  IA
+  MANUEL
+}
+
+enum StatutQuestion {
+  BROUILLON
+  A_VALIDER
+  PUBLIE
+}
+
+enum Difficulte {
+  FACILE
+  MOYEN
+  DIFFICILE
+}
+
+enum SourceCorrige {
+  FOURNI
+  GENERE
+}
+
+enum StatutValidation {
+  A_VALIDER
+  VALIDE
+}
+
+enum TypeCibleTentative {
+  QCM
+  SAISIE_LIBRE
+  EPREUVE
+}
+
+enum StatutMaitriseNotion {
+  NON_VU
+  FRAGILE
+  MAITRISE
+}
+
+enum StatutChapitre {
+  NON_COMMENCE
+  EN_COURS
+  MAITRISE
+}
+
+enum StatutFicheResume {
+  A_VALIDER
+  PUBLIE
+}
+
+enum StatutCopie {
+  EN_COURS
+  SOUMIS
+  CORRIGE
+}
+
+// ============================================================
+// STRUCTURE SCOLAIRE
+// ============================================================
+
+model Classe {
+  id            String   @id @default(cuid())
+  nom           String
+  niveau        String
+  anneeScolaire String?  @map("annee_scolaire")
+
+  matiereScolaires MatiereScolaire[]
+  users            User[]
+
+  @@map("classes")
+}
+
+model MatiereScolaire {
+  // Partage sa PK avec Matiere.id (pattern d'héritage de table, voir Matiere ci-dessous).
+  id       String  @id
+  matiere  Matiere @relation(fields: [id], references: [id], onDelete: Cascade)
+  classeId String  @map("classe_id")
+  classe   Classe  @relation(fields: [classeId], references: [id])
+  nom      String
+
+  @@map("matieres_scolaires")
+}
+
+// ============================================================
+// STRUCTURE UNIVERSITAIRE
+// ============================================================
+
+model Filiere {
+  id  String @id @default(cuid())
+  nom String
+
+  niveaux NiveauUniversitaire[]
+
+  @@map("filieres")
+}
+
+model NiveauUniversitaire {
+  id        String     @id @default(cuid())
+  filiereId String     @map("filiere_id")
+  filiere   Filiere    @relation(fields: [filiereId], references: [id])
+  nom       NiveauUniv
+
+  ueMatieres UEMatiere[]
+  users      User[]
+
+  @@map("niveaux_universitaires")
+}
+
+model UEMatiere {
+  // Partage sa PK avec Matiere.id (pattern d'héritage de table, voir Matiere ci-dessous).
+  id                     String              @id
+  matiere                Matiere             @relation(fields: [id], references: [id], onDelete: Cascade)
+  niveauUniversitaireId  String              @map("niveau_universitaire_id")
+  niveauUniversitaire    NiveauUniversitaire @relation(fields: [niveauUniversitaireId], references: [id])
+  nom                    String
+
+  @@map("ue_matieres")
+}
+
+// ============================================================
+// TRONC COMMUN — ancre "table d'héritage" reliant scolaire/universitaire
+// ============================================================
+
+/// Ancre neutre du tronc commun : Cours et Epreuve pointent uniquement vers
+/// Matiere (jamais nul), jamais vers MatiereScolaire/UEMatiere directement.
+/// Pour retrouver la classe ou la filière, joindre selon `type`.
+model Matiere {
+  id   String       @id @default(cuid())
+  type TypeParcours
+
+  matiereScolaire MatiereScolaire?
+  ueMatiere       UEMatiere?
+  cours           Cours[]
+  epreuves        Epreuve[]
+  evaluations     Evaluation[]
+
+  @@map("matieres")
+}
+
+// ============================================================
+// UTILISATEURS
+// ============================================================
+
+/// Invariant applicatif (non porté par une contrainte SQL) :
+/// ADMIN => classeId et niveauUniversitaireId nuls
+/// ELEVE => classeId requis, niveauUniversitaireId nul
+/// ETUDIANT => niveauUniversitaireId requis, classeId nul
+model User {
+  id                     String               @id @default(cuid())
+  email                  String               @unique
+  passwordHash           String               @map("password_hash")
+  role                   Role
+  nom                    String
+  classeId               String?              @map("classe_id")
+  classe                 Classe?              @relation(fields: [classeId], references: [id])
+  niveauUniversitaireId  String?              @map("niveau_universitaire_id")
+  niveauUniversitaire    NiveauUniversitaire? @relation(fields: [niveauUniversitaireId], references: [id])
+  actif                  Boolean              @default(true)
+  createdAt              DateTime             @default(now()) @map("created_at")
+  streakCount            Int                  @default(0) @map("streak_count")
+  lastActivityAt         DateTime?            @map("last_activity_at")
+
+  coursCrees               Cours[]                 @relation("CoursCreatedBy")
+  questionsQcmCreees       QuestionQcm[]           @relation("QuestionQcmCreatedBy")
+  questionsSaisieLibreCreees QuestionSaisieLibre[] @relation("QuestionSaisieLibreCreatedBy")
+  epreuvesCreees           Epreuve[]               @relation("EpreuveCreatedBy")
+  corrigesCrees            CorrigeType[]           @relation("CorrigeTypeCreatedBy")
+  tentatives               TentativeEleve[]
+  progressionsNotion       ProgressionNotion[]
+  progressionsChapitre     ProgressionChapitre[]
+  diagnosticsInitiaux      DiagnosticInitial[]
+  diagnosticsPrerequis     DiagnosticPrerequis[]
+  reponsesMetacognitives   ReponseMetacognitive[]
+  evaluationsCreees        Evaluation[]            @relation("EvaluationCreatedBy")
+  copiesEvaluation         CopieEvaluation[]       @relation("CopieEleve")
+  copiesCorrigees          CopieEvaluation[]       @relation("CopieCorrigePar")
+
+  @@map("users")
+}
+
+// ============================================================
+// CONTENU PÉDAGOGIQUE
+// ============================================================
+
+model Cours {
+  id               String           @id @default(cuid())
+  matiereId        String           @map("matiere_id")
+  matiere          Matiere          @relation(fields: [matiereId], references: [id])
+  titre            String
+  fichierPdfUrl    String           @map("fichier_pdf_url")
+  contenuExtrait   String?          @map("contenu_extrait")
+  statutExtraction StatutExtraction @default(PENDING) @map("statut_extraction")
+  createdById      String           @map("created_by")
+  createdBy        User             @relation("CoursCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  chapitres Chapitre[]
+
+  @@map("cours")
+}
+
+model Chapitre {
+  id               String            @id @default(cuid())
+  coursId          String            @map("cours_id")
+  cours            Cours             @relation(fields: [coursId], references: [id], onDelete: Cascade)
+  titre            String
+  ordre            Int               @default(0)
+  /// PDF optionnel propre au chapitre, en complément du PDF du cours parent — si présent,
+  /// son texte extrait est préféré à `cours.contenuExtrait` pour la génération IA.
+  fichierPdfUrl    String?           @map("fichier_pdf_url")
+  contenuExtrait   String?           @map("contenu_extrait")
+  statutExtraction StatutExtraction? @map("statut_extraction")
+
+  notions               Notion[]
+  questionsQcm          QuestionQcm[]
+  questionsSaisieLibre  QuestionSaisieLibre[]
+  epreuves              Epreuve[]
+  evaluations           Evaluation[]
+  progressionsChapitre  ProgressionChapitre[]
+  diagnosticsInitiaux   DiagnosticInitial[]
+
+  @@map("chapitres")
+}
+
+/// Nœud du graphe de prérequis (DAG).
+model Notion {
+  id          String  @id @default(cuid())
+  chapitreId  String  @map("chapitre_id")
+  chapitre    Chapitre @relation(fields: [chapitreId], references: [id], onDelete: Cascade)
+  nom         String
+  description String?
+
+  // Arêtes du DAG : cette notion dépend de ... / cette notion est un prérequis de ...
+  dependDe          Prerequis[] @relation("NotionDependDe")
+  estPrerequisPour  Prerequis[] @relation("NotionEstPrerequisPour")
+
+  questionsQcm            QuestionQcmNotion[]
+  questionsSaisieLibre     QuestionSaisieLibreNotion[]
+  progressions             ProgressionNotion[]
+  fichesResume             FicheResume[]
+  diagnosticsDeclenchant   DiagnosticPrerequis[] @relation("NotionDeclenchante")
+  diagnosticsTestant       DiagnosticPrerequis[] @relation("NotionPrerequisTestee")
+  epreuves                 Epreuve[]
+
+  @@map("notions")
+}
+
+/// Arête du DAG : `notion` dépend de `prerequisNotion`.
+/// Une contrainte CHECK (notion_id <> prerequis_notion_id) est ajoutée manuellement
+/// dans la migration `prerequis_no_self_reference` (non exprimable nativement dans
+/// le schema Prisma). L'acyclicité du graphe est vérifiée côté service (tri
+/// topologique) à chaque ajout/validation d'arête.
+model Prerequis {
+  notionId          String  @map("notion_id")
+  notion            Notion  @relation("NotionDependDe", fields: [notionId], references: [id], onDelete: Cascade)
+  prerequisNotionId String  @map("prerequis_notion_id")
+  prerequisNotion   Notion  @relation("NotionEstPrerequisPour", fields: [prerequisNotionId], references: [id], onDelete: Cascade)
+  statut            StatutPrerequis @default(PROPOSE_IA)
+
+  @@id([notionId, prerequisNotionId])
+  @@map("prerequis")
+}
+
+// ============================================================
+// BANQUE DE QUESTIONS
+// ============================================================
+
+model QuestionQcm {
+  id           String         @id @default(cuid())
+  chapitreId   String         @map("chapitre_id")
+  chapitre     Chapitre       @relation(fields: [chapitreId], references: [id], onDelete: Cascade)
+  enonce       String
+  choix        Json
+  bonneReponse String         @map("bonne_reponse")
+  source       SourceQuestion
+  statut       StatutQuestion @default(BROUILLON)
+  difficulte   Difficulte     @default(MOYEN)
+  createdById  String         @map("created_by")
+  createdBy    User           @relation("QuestionQcmCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  notions        QuestionQcmNotion[]
+  metacognitives QuestionMetacognitive[]
+  tentatives     TentativeEleve[]
+
+  @@map("questions_qcm")
+}
+
+model QuestionQcmNotion {
+  questionQcmId String      @map("question_qcm_id")
+  questionQcm   QuestionQcm @relation(fields: [questionQcmId], references: [id], onDelete: Cascade)
+  notionId      String      @map("notion_id")
+  notion        Notion      @relation(fields: [notionId], references: [id], onDelete: Cascade)
+
+  @@id([questionQcmId, notionId])
+  @@map("questions_qcm_notions")
+}
+
+model QuestionSaisieLibre {
+  id               String         @id @default(cuid())
+  chapitreId       String         @map("chapitre_id")
+  chapitre         Chapitre       @relation(fields: [chapitreId], references: [id], onDelete: Cascade)
+  enonce           String
+  reponseReference String         @map("reponse_reference")
+  source           SourceQuestion
+  statut           StatutQuestion @default(BROUILLON)
+  createdById      String         @map("created_by")
+  createdBy        User           @relation("QuestionSaisieLibreCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  notions        QuestionSaisieLibreNotion[]
+  metacognitives QuestionMetacognitive[]
+  tentatives     TentativeEleve[]
+
+  @@map("questions_saisie_libre")
+}
+
+model QuestionSaisieLibreNotion {
+  questionSaisieLibreId String              @map("question_saisie_libre_id")
+  questionSaisieLibre   QuestionSaisieLibre @relation(fields: [questionSaisieLibreId], references: [id], onDelete: Cascade)
+  notionId              String              @map("notion_id")
+  notion                Notion              @relation(fields: [notionId], references: [id], onDelete: Cascade)
+
+  @@id([questionSaisieLibreId, notionId])
+  @@map("questions_saisie_libre_notions")
+}
+
+model QuestionMetacognitive {
+  id                     String               @id @default(cuid())
+  questionQcmId          String?              @map("question_qcm_id")
+  questionQcm            QuestionQcm?         @relation(fields: [questionQcmId], references: [id], onDelete: Cascade)
+  questionSaisieLibreId  String?              @map("question_saisie_libre_id")
+  questionSaisieLibre    QuestionSaisieLibre? @relation(fields: [questionSaisieLibreId], references: [id], onDelete: Cascade)
+  enonce                 String
+  source                 SourceQuestion
+
+  reponses ReponseMetacognitive[]
+
+  @@map("questions_metacognitives")
+}
+
+// ============================================================
+// ÉPREUVES
+// ============================================================
+
+model Epreuve {
+  id            String        @id @default(cuid())
+  matiereId     String        @map("matiere_id")
+  matiere       Matiere       @relation(fields: [matiereId], references: [id])
+  chapitreId    String?       @map("chapitre_id")
+  chapitre      Chapitre?     @relation(fields: [chapitreId], references: [id])
+  // Notion principale testée par l'épreuve — point de départ de la descente dans le
+  // graphe de prérequis en cas d'échec. Optionnelle : une épreuve non taguée reste
+  // utilisable (corrigé, évaluation) mais ne déclenche pas de diagnostic par graphe.
+  notionPrincipaleId String? @map("notion_principale_id")
+  notionPrincipale   Notion? @relation(fields: [notionPrincipaleId], references: [id])
+  enonce        String
+  sourceCorrige SourceCorrige @map("source_corrige")
+  createdById   String        @map("created_by")
+  createdBy     User          @relation("EpreuveCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  corriges    CorrigeType[]
+  tentatives  TentativeEleve[]
+  diagnostics DiagnosticPrerequis[]
+
+  @@map("epreuves")
+}
+
+/// Plusieurs corrigés valides peuvent coexister pour une même épreuve
+/// (cas universitaire, réponses ouvertes à plusieurs approches).
+model CorrigeType {
+  id               String           @id @default(cuid())
+  epreuveId        String           @map("epreuve_id")
+  epreuve          Epreuve          @relation(fields: [epreuveId], references: [id], onDelete: Cascade)
+  contenu          String
+  estPrincipal     Boolean          @default(true) @map("est_principal")
+  statutValidation StatutValidation @default(A_VALIDER) @map("statut_validation")
+  createdById      String           @map("created_by")
+  createdBy        User             @relation("CorrigeTypeCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  @@map("corriges_types")
+}
+
+// ============================================================
+// SUIVI ÉLÈVE / MOTEUR DE MAÎTRISE
+// ============================================================
+
+model TentativeEleve {
+  id                    String             @id @default(cuid())
+  eleveId               String             @map("eleve_id")
+  eleve                 User               @relation(fields: [eleveId], references: [id])
+  typeCible             TypeCibleTentative @map("type_cible")
+  questionQcmId         String?            @map("question_qcm_id")
+  questionQcm           QuestionQcm?       @relation(fields: [questionQcmId], references: [id])
+  questionSaisieLibreId String?            @map("question_saisie_libre_id")
+  questionSaisieLibre   QuestionSaisieLibre? @relation(fields: [questionSaisieLibreId], references: [id])
+  epreuveId             String?            @map("epreuve_id")
+  epreuve               Epreuve?           @relation(fields: [epreuveId], references: [id])
+  reponseDonnee         String             @map("reponse_donnee")
+  correcte              Boolean?
+  /// { verdict, explication } — jugement sémantique IA pour la saisie libre
+  evaluationIa          Json?              @map("evaluation_ia")
+  tentativeNumero       Int                @default(1) @map("tentative_numero")
+  createdAt             DateTime           @default(now()) @map("created_at")
+
+  reponsesMetacognitives ReponseMetacognitive[]
+
+  @@map("tentatives_eleve")
+}
+
+model ProgressionNotion {
+  id                   String                @id @default(cuid())
+  eleveId              String                @map("eleve_id")
+  eleve                User                  @relation(fields: [eleveId], references: [id])
+  notionId             String                @map("notion_id")
+  notion               Notion                @relation(fields: [notionId], references: [id], onDelete: Cascade)
+  statut                  StatutMaitriseNotion  @default(NON_VU)
+  nbEchecsConsecutifs     Int                   @default(0) @map("nb_echecs_consecutifs")
+  nbSuccesConsecutifs     Int                   @default(0) @map("nb_succes_consecutifs")
+  intervalleRevisionJours Int                   @default(1) @map("intervalle_revision_jours")
+  derniereRevisionAt      DateTime?             @map("derniere_revision_at")
+  prochaineRevisionAt     DateTime?             @map("prochaine_revision_at")
+
+  @@unique([eleveId, notionId])
+  @@map("progressions_notion")
+}
+
+/// Rollup chapitre pour l'écran "parcours" (path map) — évite de recalculer
+/// le statut à partir de ProgressionNotion à chaque affichage.
+model ProgressionChapitre {
+  id         String         @id @default(cuid())
+  eleveId    String         @map("eleve_id")
+  eleve      User           @relation(fields: [eleveId], references: [id])
+  chapitreId String         @map("chapitre_id")
+  chapitre   Chapitre       @relation(fields: [chapitreId], references: [id], onDelete: Cascade)
+  statut     StatutChapitre @default(NON_COMMENCE)
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  @@unique([eleveId, chapitreId])
+  @@map("progressions_chapitre")
+}
+
+/// Générée après 2-3 échecs consécutifs sur une notion.
+model FicheResume {
+  id        String            @id @default(cuid())
+  notionId  String            @map("notion_id")
+  notion    Notion            @relation(fields: [notionId], references: [id], onDelete: Cascade)
+  contenu   String
+  statut    StatutFicheResume @default(A_VALIDER)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@map("fiches_resume")
+}
+
+model DiagnosticInitial {
+  id               String   @id @default(cuid())
+  eleveId          String   @map("eleve_id")
+  eleve            User     @relation(fields: [eleveId], references: [id])
+  chapitreId       String   @map("chapitre_id")
+  chapitre         Chapitre @relation(fields: [chapitreId], references: [id], onDelete: Cascade)
+  resultat         Json
+  niveauRecommande String?  @map("niveau_recommande")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("diagnostics_initiaux")
+}
+
+/// Une descente dans le graphe de prérequis suite à un échec sur une épreuve.
+/// `cheminParcouru` alimente le fil d'Ariane de l'UI.
+model DiagnosticPrerequis {
+  id                       String  @id @default(cuid())
+  eleveId                  String  @map("eleve_id")
+  eleve                    User    @relation(fields: [eleveId], references: [id])
+  epreuveId                String  @map("epreuve_id")
+  epreuve                  Epreuve @relation(fields: [epreuveId], references: [id], onDelete: Cascade)
+  notionDeclenchanteId     String  @map("notion_declenchante_id")
+  notionDeclenchante       Notion  @relation("NotionDeclenchante", fields: [notionDeclenchanteId], references: [id])
+  notionPrerequisTesteeId  String  @map("notion_prerequis_testee_id")
+  notionPrerequisTestee    Notion  @relation("NotionPrerequisTestee", fields: [notionPrerequisTesteeId], references: [id])
+  resolu                   Boolean @default(false)
+  cheminParcouru           Json    @map("chemin_parcouru")
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  @@map("diagnostics_prerequis")
+}
+
+// ============================================================
+// ÉVALUATIONS NOTÉES (chronométrées, correction manuelle)
+// ============================================================
+
+model Evaluation {
+  id               String            @id @default(cuid())
+  matiereId        String            @map("matiere_id")
+  matiere          Matiere           @relation(fields: [matiereId], references: [id])
+  chapitreId       String?           @map("chapitre_id")
+  chapitre         Chapitre?         @relation(fields: [chapitreId], references: [id])
+  titre            String
+  enonce           String?
+  fichierPdfUrl    String?           @map("fichier_pdf_url")
+  contenuExtrait   String?           @map("contenu_extrait")
+  statutExtraction StatutExtraction? @map("statut_extraction")
+  dureeMinutes     Int               @map("duree_minutes")
+  bareme           Int
+  createdById      String            @map("created_by")
+  createdBy        User              @relation("EvaluationCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime          @default(now()) @map("created_at")
+
+  copies CopieEvaluation[]
+
+  @@map("evaluations")
+}
+
+/// Une copie par élève et par évaluation (@@unique) : c'est un examen chronométré,
+/// pas un entraînement réessayable. La correction (note/commentaire) n'est possible
+/// qu'une fois `statut = SOUMIS`.
+model CopieEvaluation {
+  id               String      @id @default(cuid())
+  evaluationId     String      @map("evaluation_id")
+  evaluation       Evaluation  @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  eleveId          String      @map("eleve_id")
+  eleve            User        @relation("CopieEleve", fields: [eleveId], references: [id])
+  statut           StatutCopie @default(EN_COURS)
+  demarreAt        DateTime    @default(now()) @map("demarre_at")
+  dateLimiteAt     DateTime    @map("date_limite_at")
+  reponseDonnee    String?     @map("reponse_donnee")
+  reponsePhotoUrls String[]    @default([]) @map("reponse_photo_urls")
+  soumisAt         DateTime?   @map("soumis_at")
+  horsDelai        Boolean     @default(false) @map("hors_delai")
+  noteObtenue      Float?      @map("note_obtenue")
+  commentaireAdmin String?     @map("commentaire_admin")
+  pointsForts       String[]   @default([]) @map("points_forts")
+  pointsATravailler String[]   @default([]) @map("points_a_travailler")
+  corrigeParId     String?     @map("corrige_par")
+  corrigePar       User?       @relation("CopieCorrigePar", fields: [corrigeParId], references: [id])
+  corrigeAt        DateTime?   @map("corrige_at")
+
+  @@unique([evaluationId, eleveId])
+  @@map("copies_evaluation")
+}
+
+model ReponseMetacognitive {
+  id                       String                @id @default(cuid())
+  eleveId                  String                @map("eleve_id")
+  eleve                    User                  @relation(fields: [eleveId], references: [id])
+  questionMetacognitiveId  String                @map("question_metacognitive_id")
+  questionMetacognitive    QuestionMetacognitive @relation(fields: [questionMetacognitiveId], references: [id], onDelete: Cascade)
+  tentativeId              String                @map("tentative_id")
+  tentative                TentativeEleve        @relation(fields: [tentativeId], references: [id], onDelete: Cascade)
+  reponseTexte             String                @map("reponse_texte")
+  createdAt                DateTime              @default(now()) @map("created_at")
+
+  @@map("reponses_metacognitives")
+}
