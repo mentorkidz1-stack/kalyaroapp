@@ -3,6 +3,7 @@ import {
   chapitreIdParamSchema,
   notionIdParamSchema,
   diagnosticIdParamSchema,
+  tentativeIdParamSchema,
   matiereIdParamSchema,
   submitQcmAnswerSchema,
   submitFreeAnswerSchema,
@@ -38,6 +39,11 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
   fastify.post("/qcm/repondre", async (request) => {
     const { attemptToken, reponseDonnee } = submitQcmAnswerSchema.parse(request.body);
     return progressionService.submitQcmAnswer(request.user.id, attemptToken, reponseDonnee);
+  });
+
+  fastify.get("/qcm/tentatives/:id/indice", async (request) => {
+    const { id } = tentativeIdParamSchema.parse(request.params);
+    return progressionService.getTentativeIndice(request.user.id, id);
   });
 
   fastify.get("/notions/:notionId/saisie-libre/next", async (request) => {

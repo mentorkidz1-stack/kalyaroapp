@@ -450,6 +450,10 @@ model TentativeEleve {
   /// Horodatage de consommation par advanceDiagnostic — empêche qu'une même tentative
   /// QCM (vérifiée serveur) serve à faire avancer le graphe de prérequis plusieurs fois.
   usedForDiagnosticAt   DateTime?          @map("used_for_diagnostic_at")
+  /// Indice IA généré en arrière-plan après la réponse (voir submitQcmAnswer) : rempli
+  /// après coup pour ne pas faire attendre l'élève sur l'appel IA avant de savoir s'il a
+  /// juste ou faux.
+  indice                String?
 
   reponsesMetacognitives ReponseMetacognitive[]
 

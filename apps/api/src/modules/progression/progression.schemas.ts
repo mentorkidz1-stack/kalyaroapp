@@ -3,6 +3,7 @@ import { z } from "zod";
 export const chapitreIdParamSchema = z.object({ chapitreId: z.string().cuid() });
 export const notionIdParamSchema = z.object({ notionId: z.string().cuid() });
 export const diagnosticIdParamSchema = z.object({ id: z.string().cuid() });
+export const tentativeIdParamSchema = z.object({ id: z.string().cuid() });
 export const matiereIdParamSchema = z.object({ matiereId: z.string().cuid() });
 
 export const submitQcmAnswerSchema = z.object({

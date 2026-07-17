@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
@@ -14,7 +14,7 @@ import {
   ErrorState,
   MasteryCelebration,
 } from "../../design-system";
-import { useQcmNext, useSubmitQcm, type RepondreResult } from "./useQcm";
+import { useQcmNext, useSubmitQcm, useTentativeIndice, type RepondreResult } from "./useQcm";
 
 interface QcmLocationState {
   returnToEpreuve?: { epreuveId: string; enonce: string };
@@ -36,6 +36,14 @@ export function QcmSessionPage() {
   const { data: question, isLoading, error, refetch } = useQcmNext(notionId);
 
   const submitMutation = useSubmitQcm();
+  // useMutation's isPending only updates on React's next render, which is too slow to
+  // block a rapid double-click/double-tap that fires before that render happens — a ref
+  // is set synchronously on the very first call, closing the race entirely.
+  const submittingRef = useRef(false);
+
+  const { indice: polledIndice, exhausted: indicePollExhausted } = useTentativeIndice(
+    result && !result.correcte ? result.tentativeId : null
+  );
 
   const metaMutation = useMutation({
     mutationFn: () =>
@@ -48,14 +56,19 @@ export function QcmSessionPage() {
   });
 
   function handleChoice(choix: string) {
-    if (result || !question) return;
+    if (result || !question || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitError(null);
     setSelected(choix);
     submitMutation.mutate(
       { attemptToken: question.attemptToken, reponseDonnee: choix },
       {
-        onSuccess: (data) => setResult(data),
+        onSuccess: (data) => {
+          submittingRef.current = false;
+          setResult(data);
+        },
         onError: () => {
+          submittingRef.current = false;
           setSelected(null);
           setSubmitError("Ta réponse n'a pas pu être envoyée. Réessaie.");
         },
@@ -134,7 +147,12 @@ export function QcmSessionPage() {
             {question.choix.map((choix) => {
               const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
               return (
-                <ChoiceButton key={choix} state={state} disabled={!!result} onClick={() => handleChoice(choix)}>
+                <ChoiceButton
+                  key={choix}
+                  state={state}
+                  disabled={!!result || submitMutation.isPending}
+                  onClick={() => handleChoice(choix)}
+                >
                   {formatMathText(choix)}
                 </ChoiceButton>
               );
@@ -151,7 +169,11 @@ export function QcmSessionPage() {
                 <FeedbackBlock variant={result.correcte ? "ok" : "warn"}>
                   {result.correcte
                     ? "Bien joué, c'est la bonne réponse !"
-                    : formatMathText(result.indice ?? "Presque — reprends la question reformulée pour t'entraîner encore un peu.")}
+                    : polledIndice
+                      ? formatMathText(polledIndice)
+                      : indicePollExhausted
+                        ? "Pas tout à fait — retente une prochaine fois."
+                        : "Pas tout à fait… un instant, on prépare une explication."}
                 </FeedbackBlock>
               </div>
             )}

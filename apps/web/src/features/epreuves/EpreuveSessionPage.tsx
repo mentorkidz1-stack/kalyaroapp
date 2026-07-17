@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
@@ -179,6 +179,9 @@ function SondagePhase({
   const [correcte, setCorrecte] = useState<boolean | null>(null);
   const [tentativeId, setTentativeId] = useState<string | null>(null);
   const [phaseError, setPhaseError] = useState<string | null>(null);
+  // See QcmSessionPage.tsx: isPending lags a render behind a rapid double-click, a ref
+  // set synchronously on the first call closes the race regardless of render timing.
+  const submittingRef = useRef(false);
 
   const advance = useMutation({
     mutationFn: (tentativeId: string) =>
@@ -188,17 +191,20 @@ function SondagePhase({
   });
 
   function handleChoice(choix: string) {
-    if (correcte !== null || !question) return;
+    if (correcte !== null || !question || submittingRef.current) return;
+    submittingRef.current = true;
     setPhaseError(null);
     setSelected(choix);
     submitQcm.mutate(
       { attemptToken: question.attemptToken, reponseDonnee: choix },
       {
         onSuccess: (result) => {
+          submittingRef.current = false;
           setCorrecte(result.correcte);
           setTentativeId(result.tentativeId);
         },
         onError: () => {
+          submittingRef.current = false;
           setSelected(null);
           setPhaseError("Ta réponse n'a pas pu être envoyée. Réessaie.");
         },
@@ -227,7 +233,7 @@ function SondagePhase({
               <ChoiceButton
                 key={choix}
                 state={state}
-                disabled={correcte !== null}
+                disabled={correcte !== null || submitQcm.isPending}
                 onClick={() => handleChoice(choix)}
               >
                 {formatMathText(choix)}

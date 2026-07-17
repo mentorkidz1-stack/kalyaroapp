@@ -339,27 +339,52 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     }
   }
 
-  let indice: string | null = null;
+  // L'indice est généré en arrière-plan, pas attendu ici : explainQcmAnswer prend
+  // couramment plusieurs secondes, et le faire attendre à l'élève avant même de savoir
+  // s'il a juste ou faux rend chaque mauvaise réponse perceptiblement lente. La réponse
+  // part immédiatement avec indice=null ; le frontend récupère l'indice via un court
+  // sondage sur GET .../qcm/tentatives/:id/indice une fois qu'il est prêt.
   if (!correcte) {
-    try {
-      // On utilise l'énoncé/les choix embarqués dans le jeton (ce que l'élève a réellement
-      // vu à l'écran), pas la question originale en base : si elle a été reformulée par
-      // l'IA, les valeurs numériques diffèrent et un indice basé sur la version d'origine
-      // induirait l'élève en erreur.
-      const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId } });
-      const explanation = await explainQcmAnswer({
-        notionNom: notion.nom,
-        question: payload.enonce,
-        choix: payload.choix,
-        reponseDonnee,
-      });
-      indice = explanation.indice;
-    } catch {
-      indice = null;
-    }
+    generateIndiceInBackground(tentative.id, payload, reponseDonnee);
   }
 
-  return { tentativeId: tentative.id, correcte, statutNotion: statut, ficheResume, questionMetacognitive, indice };
+  return { tentativeId: tentative.id, correcte, statutNotion: statut, ficheResume, questionMetacognitive, indice: null };
+};
+
+function generateIndiceInBackground(
+  tentativeId: string,
+  payload: QcmAttemptTokenPayload,
+  reponseDonnee: string
+) {
+  (async () => {
+    // On utilise l'énoncé/les choix embarqués dans le jeton (ce que l'élève a réellement
+    // vu à l'écran), pas la question originale en base : si elle a été reformulée par
+    // l'IA, les valeurs numériques diffèrent et un indice basé sur la version d'origine
+    // induirait l'élève en erreur.
+    const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId } });
+    const explanation = await explainQcmAnswer({
+      notionNom: notion.nom,
+      question: payload.enonce,
+      choix: payload.choix,
+      reponseDonnee,
+    });
+    await prisma.tentativeEleve.update({
+      where: { id: tentativeId },
+      data: { indice: explanation.indice },
+    });
+  })().catch(() => {
+    // Échec silencieux : le champ indice reste null, le sondage frontend abandonnera
+    // après son délai maximal plutôt que de bloquer indéfiniment.
+  });
+}
+
+export const getTentativeIndice = async (eleveId: string, tentativeId: string) => {
+  const tentative = await prisma.tentativeEleve.findUnique({
+    where: { id: tentativeId },
+    select: { eleveId: true, indice: true },
+  });
+  if (!tentative || tentative.eleveId !== eleveId) throw new AppError("Tentative introuvable", 404);
+  return { indice: tentative.indice };
 };
 
 // ---- Saisie libre (débloquée après maîtrise) ----
