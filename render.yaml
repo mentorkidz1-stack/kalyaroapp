@@ -40,7 +40,6 @@ services:
   - type: web
     name: kalyaro-web
     runtime: static
-    region: frankfurt
     buildCommand: npm install && npm run build --workspace apps/web
     staticPublishPath: apps/web/dist
     envVars:
