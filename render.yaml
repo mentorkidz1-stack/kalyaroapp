@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm install && npx prisma generate --schema apps/api/prisma/schema.prisma && npm run build --workspace apps/api
+    buildCommand: npm install && npx prisma generate --schema apps/api/prisma/schema.prisma && npm run build --workspace packages/shared && npm run build --workspace packages/ai-service && npm run build --workspace apps/api
     startCommand: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && npm run start --workspace apps/api
     healthCheckPath: /health
     envVars:
@@ -40,7 +40,7 @@ services:
   - type: web
     name: kalyaro-web
     runtime: static
-    buildCommand: npm install && npm run build --workspace apps/web
+    buildCommand: npm install && npm run build --workspace packages/shared && npm run build --workspace apps/web
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
