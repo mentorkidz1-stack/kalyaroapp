@@ -220,9 +220,11 @@ function GrapheSection({ chapitreId }: { chapitreId: string }) {
   const proposeIa = useMutation({
     mutationFn: () => api.post(`/api/admin/chapitres/${chapitreId}/notions/propose-graphe-ia`, {}),
     onSuccess: () => {
+      setError(null);
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["notions", chapitreId] });
     },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
   });
 
   return (
@@ -334,6 +336,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
   const [bonneReponse, setBonneReponse] = useState("");
   const [notionIds, setNotionIds] = useState<string[]>([]);
   const [nombreIa, setNombreIa] = useState(5);
+  const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["questions-qcm", chapitreId] });
 
@@ -347,17 +350,23 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
         notionIds,
       }),
     onSuccess: () => {
+      setError(null);
       setEnonce("");
       setChoix(["", "", "", ""]);
       setBonneReponse("");
       setNotionIds([]);
       invalidate();
     },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
   });
   const generateIa = useMutation({
     mutationFn: () =>
       api.post(`/api/admin/chapitres/${chapitreId}/questions-qcm/generate-ia`, { nombreQuestions: nombreIa }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
   });
   const publier = useMutation({
     mutationFn: (id: string) => api.patch(`/api/admin/questions-qcm/${id}`, { statut: "PUBLIE" }),
@@ -477,6 +486,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
           Créer le QCM
         </Button>
       </div>
+      {error && <p className="text-sm text-alert mt-2">{error}</p>}
     </Card>
   );
 }
@@ -493,6 +503,7 @@ function SaisieLibreSection({ chapitreId }: { chapitreId: string }) {
   const [reponseReference, setReponseReference] = useState("");
   const [notionIds, setNotionIds] = useState<string[]>([]);
   const [nombreIa, setNombreIa] = useState(5);
+  const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["questions-saisie-libre", chapitreId] });
 
@@ -500,16 +511,22 @@ function SaisieLibreSection({ chapitreId }: { chapitreId: string }) {
     mutationFn: () =>
       api.post(`/api/admin/chapitres/${chapitreId}/questions-saisie-libre`, { enonce, reponseReference, notionIds }),
     onSuccess: () => {
+      setError(null);
       setEnonce("");
       setReponseReference("");
       setNotionIds([]);
       invalidate();
     },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
   });
   const generateIa = useMutation({
     mutationFn: () =>
       api.post(`/api/admin/chapitres/${chapitreId}/questions-saisie-libre/generate-ia`, { nombreQuestions: nombreIa }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
   });
   const publier = useMutation({
     mutationFn: (id: string) => api.patch(`/api/admin/questions-saisie-libre/${id}`, { statut: "PUBLIE" }),
@@ -606,6 +623,7 @@ function SaisieLibreSection({ chapitreId }: { chapitreId: string }) {
           Créer la question
         </Button>
       </div>
+      {error && <p className="text-sm text-alert mt-2">{error}</p>}
     </Card>
   );
 }

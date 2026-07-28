@@ -340,7 +340,11 @@ function CorrigesList({ epreuveId }: { epreuveId: string }) {
   });
   const generateIa = useMutation({
     mutationFn: () => api.post(`/api/admin/epreuves/${epreuveId}/corriges/generate-ia`, {}),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
   });
   const valider = useMutation({
     mutationFn: (id: string) => api.patch(`/api/admin/corriges/${id}`, { statutValidation: "VALIDE" }),
