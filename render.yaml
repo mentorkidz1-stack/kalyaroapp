@@ -3,7 +3,7 @@ services:
     name: kalyaro-api
     runtime: node
     plan: free
-    region: frankfurt
+    region: oregon
     buildCommand: npm install && npx prisma generate --schema apps/api/prisma/schema.prisma && npm run build --workspace packages/shared && npm run build --workspace packages/ai-service && npm run build --workspace apps/api
     startCommand: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && npm run start --workspace apps/api
     healthCheckPath: /health
