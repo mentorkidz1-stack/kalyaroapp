@@ -1,7 +1,6 @@
-import { createReadStream } from "node:fs";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
-import { savePdfFile, getPdfFilePath, pdfFileExists, deletePdfFile } from "../../lib/pdf-upload.js";
+import { savePdfFile, getPdfFileStream, pdfFileExists, deletePdfFile } from "../../lib/pdf-upload.js";
 
 export async function saveCoursPdf(input: {
   titre: string;
@@ -55,8 +54,8 @@ export const deleteCours = async (id: string) => {
 export const getCoursPdfStream = async (id: string) => {
   const cours = await prisma.cours.findUnique({ where: { id } });
   if (!cours) throw new AppError("Cours introuvable", 404);
-  if (!pdfFileExists(cours.fichierPdfUrl)) throw new AppError("Fichier PDF introuvable sur le serveur", 404);
-  return { stream: createReadStream(getPdfFilePath(cours.fichierPdfUrl)), titre: cours.titre };
+  if (!(await pdfFileExists(cours.fichierPdfUrl))) throw new AppError("Fichier PDF introuvable sur le serveur", 404);
+  return { stream: await getPdfFileStream(cours.fichierPdfUrl), titre: cours.titre };
 };
 
 // ---- Chapitres ----

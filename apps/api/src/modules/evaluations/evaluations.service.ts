@@ -1,9 +1,8 @@
-import { createReadStream } from "node:fs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
-import { savePdfFile, getPdfFilePath, pdfFileExists, deletePdfFile } from "../../lib/pdf-upload.js";
-import { saveImageFile, getImageFilePath, imageFileExists, getImageContentType } from "../../lib/image-upload.js";
+import { savePdfFile, getPdfFileStream, pdfFileExists, deletePdfFile } from "../../lib/pdf-upload.js";
+import { saveImageFile, getImageFileStream, imageFileExists, getImageContentType } from "../../lib/image-upload.js";
 import { assertMatiereAccessible } from "../../lib/matiere-access.js";
 import { recordDailyActivity } from "../../lib/streak.js";
 import { generateEvaluationFeedback } from "@kalyaro/ai-service";
@@ -77,8 +76,8 @@ export const deleteEvaluation = async (id: string) => {
 export const getEvaluationPdfStream = async (id: string) => {
   const evaluation = await prisma.evaluation.findUnique({ where: { id } });
   if (!evaluation?.fichierPdfUrl) throw new AppError("Aucun fichier PDF pour cette évaluation", 404);
-  if (!pdfFileExists(evaluation.fichierPdfUrl)) throw new AppError("Fichier PDF introuvable sur le serveur", 404);
-  return { stream: createReadStream(getPdfFilePath(evaluation.fichierPdfUrl)), titre: evaluation.titre };
+  if (!(await pdfFileExists(evaluation.fichierPdfUrl))) throw new AppError("Fichier PDF introuvable sur le serveur", 404);
+  return { stream: await getPdfFileStream(evaluation.fichierPdfUrl), titre: evaluation.titre };
 };
 
 export const getEvaluationPdfStreamForEleve = async (eleveId: string, evaluationId: string) => {
@@ -86,8 +85,8 @@ export const getEvaluationPdfStreamForEleve = async (eleveId: string, evaluation
   if (!evaluation) throw new AppError("Évaluation introuvable", 404);
   await assertMatiereAccessible(eleveId, evaluation.matiereId);
   if (!evaluation.fichierPdfUrl) throw new AppError("Aucun fichier PDF pour cette évaluation", 404);
-  if (!pdfFileExists(evaluation.fichierPdfUrl)) throw new AppError("Fichier PDF introuvable sur le serveur", 404);
-  return { stream: createReadStream(getPdfFilePath(evaluation.fichierPdfUrl)), titre: evaluation.titre };
+  if (!(await pdfFileExists(evaluation.fichierPdfUrl))) throw new AppError("Fichier PDF introuvable sur le serveur", 404);
+  return { stream: await getPdfFileStream(evaluation.fichierPdfUrl), titre: evaluation.titre };
 };
 
 export const listCopiesACorriger = () =>
@@ -260,8 +259,8 @@ export const soumettreCopie = async (
 const resolveCopiePhoto = async (copie: { reponsePhotoUrls: string[] }, index: number) => {
   const storedFilename = copie.reponsePhotoUrls[index];
   if (!storedFilename) throw new AppError("Photo introuvable", 404);
-  if (!imageFileExists(storedFilename)) throw new AppError("Fichier photo introuvable sur le serveur", 404);
-  return { stream: createReadStream(getImageFilePath(storedFilename)), contentType: getImageContentType(storedFilename) };
+  if (!(await imageFileExists(storedFilename))) throw new AppError("Fichier photo introuvable sur le serveur", 404);
+  return { stream: await getImageFileStream(storedFilename), contentType: getImageContentType(storedFilename) };
 };
 
 export const getCopiePhotoStreamAdmin = async (copieId: string, index: number) => {

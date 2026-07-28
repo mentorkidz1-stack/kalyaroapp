@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import type { Readable } from "node:stream";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { s3, R2_BUCKET_NAME } from "./storage.js";
 
-const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 const PDF_PARSE_SHIM = path.resolve(process.cwd(), "pdf-parse-shim.cjs");
 
 // pdf-parse (via son bundle pdf.js interne, très ancien) échoue silencieusement
@@ -57,18 +57,15 @@ async function extractPdfTextViaChildProcess(buffer: Buffer): Promise<string> {
   });
 }
 
-async function ensureUploadDir() {
-  await mkdir(UPLOAD_DIR, { recursive: true });
-}
-
 function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 export async function savePdfFile(filename: string, buffer: Buffer) {
-  await ensureUploadDir();
   const storedFilename = `${randomUUID()}-${sanitizeFilename(filename)}`;
-  await writeFile(path.join(UPLOAD_DIR, storedFilename), buffer);
+  await s3.send(
+    new PutObjectCommand({ Bucket: R2_BUCKET_NAME, Key: storedFilename, Body: buffer, ContentType: "application/pdf" })
+  );
 
   let contenuExtrait: string | null = null;
   let statutExtraction: "DONE" | "ERROR" = "DONE";
@@ -88,15 +85,20 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
   return (await extractPdfTextViaChildProcess(buffer)).trim();
 }
 
-export function getPdfFilePath(storedFilename: string) {
-  return path.join(UPLOAD_DIR, storedFilename);
+export async function getPdfFileStream(storedFilename: string): Promise<Readable> {
+  const result = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: storedFilename }));
+  return result.Body as Readable;
 }
 
-export function pdfFileExists(storedFilename: string) {
-  return existsSync(getPdfFilePath(storedFilename));
+export async function pdfFileExists(storedFilename: string): Promise<boolean> {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: storedFilename }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function deletePdfFile(storedFilename: string) {
-  const filePath = getPdfFilePath(storedFilename);
-  if (existsSync(filePath)) await unlink(filePath);
+  await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: storedFilename }));
 }
