@@ -15,6 +15,7 @@ import examsRoutes from "./modules/exams/exams.routes.js";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes.js";
 import { evaluationsAdminRoutes, evaluationsEleveRoutes } from "./modules/evaluations/evaluations.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
+import passagesRoutes from "./modules/passages/passages.routes.js";
 
 const app = Fastify({ logger: true });
 
@@ -40,6 +41,7 @@ await app.register(dashboardRoutes, { prefix: "/api/admin" });
 await app.register(evaluationsAdminRoutes, { prefix: "/api/admin" });
 await app.register(evaluationsEleveRoutes, { prefix: "/api/eleve" });
 await app.register(usersRoutes, { prefix: "/api/admin" });
+await app.register(passagesRoutes, { prefix: "/api/eleve" });
 
 const port = Number(process.env.PORT ?? 4000);
 

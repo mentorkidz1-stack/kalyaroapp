@@ -9,11 +9,10 @@ import {
   submitFreeAnswerSchema,
   submitDiagnosticInitialSchema,
   submitMetacognitiveAnswerSchema,
-  epreuveIdParamSchema,
-  submitEpreuveSchema,
   advanceDiagnosticSchema,
 } from "./progression.schemas.js";
 import * as progressionService from "./progression.service.js";
+import { listEpreuvesPourEtudiant } from "../passages/passages.service.js";
 
 export default async function progressionRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.requireRole("ELEVE", "ETUDIANT"));
@@ -62,7 +61,7 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
 
   fastify.get("/matieres/:matiereId/epreuves", async (request) => {
     const { matiereId } = matiereIdParamSchema.parse(request.params);
-    return progressionService.listEpreuvesForEleve(request.user.id, matiereId);
+    return listEpreuvesPourEtudiant(request.user.id, matiereId);
   });
 
   fastify.post("/chapitres/:chapitreId/diagnostic-initial", async (request, reply) => {
@@ -81,12 +80,6 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
   fastify.post("/metacognitif/repondre", async (request, reply) => {
     const data = submitMetacognitiveAnswerSchema.parse(request.body);
     return reply.code(201).send(await progressionService.submitMetacognitiveAnswer(request.user.id, data));
-  });
-
-  fastify.post("/epreuves/:id/soumettre", async (request) => {
-    const { id } = epreuveIdParamSchema.parse(request.params);
-    const { reponseDonnee } = submitEpreuveSchema.parse(request.body);
-    return progressionService.submitEpreuve(request.user.id, id, reponseDonnee);
   });
 
   fastify.post("/diagnostic/:id/avancer", async (request) => {

@@ -31,6 +31,4 @@ export const submitMetacognitiveAnswerSchema = z.object({
   reponseTexte: z.string().min(1),
 });
 
-export const epreuveIdParamSchema = z.object({ id: z.string().cuid() });
-export const submitEpreuveSchema = z.object({ reponseDonnee: z.string().min(1) });
 export const advanceDiagnosticSchema = z.object({ tentativeId: z.string().cuid() });

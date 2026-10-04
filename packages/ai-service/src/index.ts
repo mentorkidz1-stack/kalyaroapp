@@ -14,6 +14,8 @@ export * from "./schemas/generate-initial-diagnostic.js";
 export * from "./schemas/propose-prerequisite-graph.js";
 export * from "./schemas/explain-qcm-answer.js";
 export * from "./schemas/generate-evaluation-feedback.js";
+export * from "./schemas/grade-exam-answer.js";
+export * from "./schemas/propose-exam-split.js";
 
 export * from "./functions/generate-qcm.js";
 export * from "./functions/generate-saisie-libre.js";
@@ -27,3 +29,7 @@ export * from "./functions/generate-initial-diagnostic.js";
 export * from "./functions/propose-prerequisite-graph.js";
 export * from "./functions/explain-qcm-answer.js";
 export * from "./functions/generate-evaluation-feedback.js";
+export * from "./functions/grade-exam-answer.js";
+export * from "./functions/propose-exam-split.js";
+
+export { consignePublic, type Parcours } from "./prompts/shared.js";

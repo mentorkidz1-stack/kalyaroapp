@@ -9,7 +9,7 @@ import {
 } from "@kalyaro/ai-service";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
-import { assertMatiereAccessible, getAccessibleMatiereIds } from "../../lib/matiere-access.js";
+import { getAccessibleMatiereIds } from "../../lib/matiere-access.js";
 import { recordDailyActivity, projectCurrentStreak } from "../../lib/streak.js";
 import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload } from "./attempt-token.js";
 import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
@@ -40,17 +40,6 @@ export const getStreak = async (eleveId: string) => {
     select: { streakCount: true, lastActivityAt: true },
   });
   return { streakCount: projectCurrentStreak(user.streakCount, user.lastActivityAt, new Date()) };
-};
-
-// ---- Épreuves (liste élève) ----
-
-export const listEpreuvesForEleve = async (eleveId: string, matiereId: string) => {
-  await assertMatiereAccessible(eleveId, matiereId);
-  return prisma.epreuve.findMany({
-    where: { matiereId, corriges: { some: { statutValidation: "VALIDE" } } },
-    include: { notionPrincipale: true },
-    orderBy: { createdAt: "desc" },
-  });
 };
 
 // ---- Parcours (vue path map) ----
@@ -568,7 +557,9 @@ async function getDirectPrerequisites(notionId: string) {
   return edges.map((e) => e.prerequisNotion);
 }
 
-async function startPrerequisiteDescent(
+/** Démarre la descente dans le graphe de prérequis à partir de la notion d'une question ratée.
+ * Renvoie null si la notion n'a pas de prérequis validé à sonder. */
+export async function startPrerequisiteDescent(
   eleveId: string,
   epreuveId: string,
   notionDeclenchanteId: string,
@@ -609,71 +600,6 @@ async function startPrerequisiteDescent(
     notionASonder: { id: candidate.id, nom: candidate.nom, chapitreId: candidate.chapitreId },
   };
 }
-
-export const submitEpreuve = async (eleveId: string, epreuveId: string, reponseDonnee: string) => {
-  const epreuve = await prisma.epreuve.findUnique({ where: { id: epreuveId } });
-  if (!epreuve) throw new AppError("Épreuve introuvable", 404);
-
-  const corriges = await prisma.corrigeType.findMany({
-    where: { epreuveId, statutValidation: "VALIDE" },
-    orderBy: { estPrincipal: "desc" },
-  });
-  if (corriges.length === 0) {
-    throw new AppError("Aucun corrigé validé n'est disponible pour cette épreuve", 400);
-  }
-
-  // Plusieurs corrigés valides peuvent coexister (cas universitaire) — la réponse est
-  // acceptée si elle correspond au sens de N'IMPORTE LEQUEL des corrigés validés.
-  let valide = false;
-  let explication = "";
-  for (const corrige of corriges) {
-    const evaluation = await evaluateFreeAnswer({
-      question: epreuve.enonce,
-      reponseReference: corrige.contenu,
-      reponseEleve: reponseDonnee,
-    });
-    explication = evaluation.explication;
-    if (evaluation.valide) {
-      valide = true;
-      break;
-    }
-  }
-
-  const previousAttemptsCount = await prisma.tentativeEleve.count({ where: { eleveId, epreuveId } });
-  await prisma.tentativeEleve.create({
-    data: {
-      eleveId,
-      typeCible: "EPREUVE",
-      epreuveId,
-      reponseDonnee,
-      correcte: valide,
-      evaluationIa: { valide, explication },
-      tentativeNumero: previousAttemptsCount + 1,
-    },
-  });
-  await recordDailyActivity(eleveId);
-
-  if (valide) {
-    await prisma.diagnosticPrerequis.updateMany({
-      where: { eleveId, epreuveId, resolu: false },
-      data: { resolu: true },
-    });
-    return { valide, explication, diagnostic: null };
-  }
-
-  if (!epreuve.notionPrincipaleId) {
-    return { valide: false, explication, diagnostic: null };
-  }
-
-  const diagnostic = await startPrerequisiteDescent(
-    eleveId,
-    epreuveId,
-    epreuve.notionPrincipaleId,
-    reponseDonnee,
-    epreuve.enonce
-  );
-  return { valide: false, explication, diagnostic };
-};
 
 export const advanceDiagnostic = async (eleveId: string, diagnosticId: string, tentativeId: string) => {
   const diagnostic = await prisma.diagnosticPrerequis.findUnique({ where: { id: diagnosticId } });

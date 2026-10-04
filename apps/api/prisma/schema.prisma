@@ -96,6 +96,11 @@ enum StatutFicheResume {
   PUBLIE
 }
 
+enum ModePassage {
+  ENTRAINEMENT
+  EXAMEN_BLANC
+}
+
 enum StatutCopie {
   EN_COURS
   SOUMIS
@@ -213,6 +218,8 @@ model User {
   questionsSaisieLibreCreees QuestionSaisieLibre[] @relation("QuestionSaisieLibreCreatedBy")
   epreuvesCreees           Epreuve[]               @relation("EpreuveCreatedBy")
   corrigesCrees            CorrigeType[]           @relation("CorrigeTypeCreatedBy")
+  corrigesQuestionsCrees   CorrigeQuestionEpreuve[] @relation("CorrigeQuestionEpreuveCreatedBy")
+  passagesEpreuve          PassageEpreuve[]
   tentatives               TentativeEleve[]
   progressionsNotion       ProgressionNotion[]
   progressionsChapitre     ProgressionChapitre[]
@@ -289,6 +296,7 @@ model Notion {
   diagnosticsDeclenchant   DiagnosticPrerequis[] @relation("NotionDeclenchante")
   diagnosticsTestant       DiagnosticPrerequis[] @relation("NotionPrerequisTestee")
   epreuves                 Epreuve[]
+  questionsEpreuve         QuestionEpreuve[]
 
   @@map("notions")
 }
@@ -415,8 +423,21 @@ model Epreuve {
   createdById   String        @map("created_by")
   createdBy     User          @relation("EpreuveCreatedBy", fields: [createdById], references: [id])
   createdAt     DateTime      @default(now()) @map("created_at")
+  // Métadonnées d'origine du sujet (chantier 2.1) — facultatives pour les épreuves existantes.
+  annee               Int?
+  /// ex. « Session normale », « Rattrapage »
+  session             String?
+  /// ex. « Partiel L1 », « Examen de fin de semestre »
+  examen              String?
+  /// Université ou faculté d'origine du sujet
+  etablissementSource String? @map("etablissement_source")
+  dureeMinutes        Int?    @map("duree_minutes")
+  /// Total des points. Si absent, somme des points des questions.
+  bareme              Float?
 
   corriges    CorrigeType[]
+  questions   QuestionEpreuve[]
+  passages    PassageEpreuve[]
   tentatives  TentativeEleve[]
   diagnostics DiagnosticPrerequis[]
 
@@ -439,6 +460,70 @@ model CorrigeType {
   @@map("corriges_types")
 }
 
+/// Question d'une épreuve découpée (chantier 2.1). Une épreuve SANS question est traitée
+/// comme une question unique (son énoncé complet, ses CorrigeType) : compatibilité ascendante.
+/// Le découpage est enregistré par un admin, ce qui vaut validation humaine.
+model QuestionEpreuve {
+  id        String   @id @default(cuid())
+  epreuveId String   @map("epreuve_id")
+  epreuve   Epreuve  @relation(fields: [epreuveId], references: [id], onDelete: Cascade)
+  /// Numérotation affichée, ex. « 1.a »
+  numero    String
+  enonce    String
+  points    Float
+  notionId  String?  @map("notion_id")
+  notion    Notion?  @relation(fields: [notionId], references: [id], onDelete: SetNull)
+  ordre     Int      @default(0)
+  /// Figure structurée (chantier 2.3)
+  figure    Json?
+  imageUrls String[] @default([]) @map("image_urls")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  corriges   CorrigeQuestionEpreuve[]
+  tentatives TentativeEleve[]
+
+  @@index([epreuveId])
+  @@map("questions_epreuve")
+}
+
+/// Même logique que CorrigeType : plusieurs corrigés valides possibles par question, et un
+/// corrigé généré par IA reste A_VALIDER tant qu'un admin ne l'a pas relu.
+model CorrigeQuestionEpreuve {
+  id                String           @id @default(cuid())
+  questionEpreuveId String           @map("question_epreuve_id")
+  questionEpreuve   QuestionEpreuve  @relation(fields: [questionEpreuveId], references: [id], onDelete: Cascade)
+  contenu           String
+  estPrincipal      Boolean          @default(true) @map("est_principal")
+  statutValidation  StatutValidation @default(A_VALIDER) @map("statut_validation")
+  createdById       String           @map("created_by")
+  createdBy         User             @relation("CorrigeQuestionEpreuveCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  @@index([questionEpreuveId])
+  @@map("corriges_questions_epreuve")
+}
+
+/// Un passage complet d'une épreuve par un étudiant : regroupe ses réponses question par
+/// question et porte la note finale. ENTRAINEMENT : correction après chaque question ;
+/// EXAMEN_BLANC (chantier 2.2) : chronométré, correction à la fin.
+model PassageEpreuve {
+  id            String      @id @default(cuid())
+  eleveId       String      @map("eleve_id")
+  eleve         User        @relation(fields: [eleveId], references: [id])
+  epreuveId     String      @map("epreuve_id")
+  epreuve       Epreuve     @relation(fields: [epreuveId], references: [id], onDelete: Cascade)
+  mode          ModePassage @default(ENTRAINEMENT)
+  demarreAt     DateTime    @default(now()) @map("demarre_at")
+  termineAt     DateTime?   @map("termine_at")
+  pointsObtenus Float?      @map("points_obtenus")
+  bareme        Float?
+
+  tentatives TentativeEleve[]
+
+  @@index([eleveId, epreuveId])
+  @@map("passages_epreuve")
+}
+
 // ============================================================
 // SUIVI ÉLÈVE / MOTEUR DE MAÎTRISE
 // ============================================================
@@ -454,6 +539,14 @@ model TentativeEleve {
   questionSaisieLibre   QuestionSaisieLibre? @relation(fields: [questionSaisieLibreId], references: [id])
   epreuveId             String?            @map("epreuve_id")
   epreuve               Epreuve?           @relation(fields: [epreuveId], references: [id])
+  /// Question d'épreuve découpée ; null pour une épreuve traitée comme question unique.
+  questionEpreuveId     String?            @map("question_epreuve_id")
+  questionEpreuve       QuestionEpreuve?   @relation(fields: [questionEpreuveId], references: [id], onDelete: SetNull)
+  passageId             String?            @map("passage_id")
+  passage               PassageEpreuve?    @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  /// Points obtenus / points de la question (épreuves notées sur barème).
+  pointsObtenus         Float?             @map("points_obtenus")
+  pointsMax             Float?             @map("points_max")
   reponseDonnee         String             @map("reponse_donnee")
   correcte              Boolean?
   /// { verdict, explication } — jugement sémantique IA pour la saisie libre
@@ -470,6 +563,7 @@ model TentativeEleve {
 
   reponsesMetacognitives ReponseMetacognitive[]
 
+  @@index([passageId])
   @@map("tentatives_eleve")
 }
 
