@@ -1,25 +1,39 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api-client";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { api, ApiError } from "../../lib/api-client";
 import { useAuthStore } from "../../stores/auth";
 import { AppHeader } from "../../components/AppHeader";
-import { Card, Button, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
+import { Badge, Card, Button, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
 import { useStreak } from "../streak/useStreak";
 
 interface Matiere {
   id: string;
   nom: string;
 }
-interface Epreuve {
+interface EpreuveEtudiant {
   id: string;
   enonce: string;
+  annee: number | null;
+  session: string | null;
+  examen: string | null;
+  etablissementSource: string | null;
+  dureeMinutes: number | null;
+  bareme: number;
+  nbQuestions: number;
+  decoupee: boolean;
+  dernierPassage: { id: string; termineAt: string; note: number | null; bareme: number | null } | null;
 }
+
+const formatPoints = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+/** Aperçu court du sujet : le texte complet s'affiche pendant le passage. */
+const apercu = (texte: string) => (texte.length > 180 ? `${texte.slice(0, 180).trimEnd()}…` : texte);
 
 export function EpreuvesListPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [matiereId, setMatiereId] = useState<string | null>(null);
+  const [erreurDemarrage, setErreurDemarrage] = useState<string | null>(null);
 
   const {
     data: matieres,
@@ -42,14 +56,20 @@ export function EpreuvesListPage() {
     refetch: refetchEpreuves,
   } = useQuery({
     queryKey: ["epreuves-eleve", matiereId],
-    queryFn: () => api.get<Epreuve[]>(`/api/eleve/matieres/${matiereId}/epreuves`),
+    queryFn: () => api.get<EpreuveEtudiant[]>(`/api/eleve/matieres/${matiereId}/epreuves`),
     enabled: !!matiereId,
   });
   const { data: streakData } = useStreak();
 
+  const demarrer = useMutation({
+    mutationFn: (epreuveId: string) => api.post<{ passageId: string }>(`/api/eleve/epreuves/${epreuveId}/passages`),
+    onSuccess: (p) => navigate(`/epreuves/passages/${p.passageId}`),
+    onError: (err) => setErreurDemarrage(err instanceof ApiError ? err.message : "Impossible de démarrer l'épreuve."),
+  });
+
   return (
     <div className="min-h-screen bg-bg">
-      <AppHeader title="Épreuves" subtitle="Kalyaro" streak={streakData?.streakCount} />
+      <AppHeader title="Épreuves" subtitle="Anciens sujets d'examen" streak={streakData?.streakCount} />
       <div className="max-w-lg mx-auto p-5 space-y-4">
         {isLoadingMatieres && <LoadingState label="Chargement de tes matières…" />}
         {!isLoadingMatieres && matieresError && (
@@ -75,8 +95,10 @@ export function EpreuvesListPage() {
           </div>
         )}
 
+        {erreurDemarrage && <ErrorState message={erreurDemarrage} />}
+
         {matiereId && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {isLoadingEpreuves && <LoadingState label="Chargement des épreuves…" />}
             {!isLoadingEpreuves && epreuvesError && (
               <ErrorState message="Impossible de charger les épreuves." onRetry={() => refetchEpreuves()} />
@@ -86,12 +108,42 @@ export function EpreuvesListPage() {
             )}
             {epreuves?.map((e) => (
               <Card key={e.id}>
-                <p className="text-sm font-semibold text-ink mb-3"><MathText text={e.enonce} /></p>
+                <div className="font-display font-bold text-base text-ink">{e.examen ?? "Épreuve"}</div>
+                <div className="flex flex-wrap gap-1.5 my-2">
+                  {[e.session, e.annee?.toString(), e.etablissementSource].filter(Boolean).map((t) => (
+                    <Badge key={t} variant="manual">
+                      {t}
+                    </Badge>
+                  ))}
+                  <Badge variant="neutral">
+                    {e.nbQuestions} question{e.nbQuestions > 1 ? "s" : ""} · sur {formatPoints(e.bareme)}
+                  </Badge>
+                  {e.dureeMinutes && <Badge variant="neutral">{e.dureeMinutes} min</Badge>}
+                </div>
+                <p className="text-sm text-ink-soft mb-3">
+                  <MathText text={apercu(e.enonce)} />
+                </p>
+                {e.dernierPassage?.note != null && (
+                  <p className="text-sm text-ink mb-3">
+                    Ta dernière note :{" "}
+                    <strong>
+                      {formatPoints(e.dernierPassage.note)} / {formatPoints(e.dernierPassage.bareme ?? e.bareme)}
+                    </strong>
+                  </p>
+                )}
                 <Button
                   className="w-auto"
-                  onClick={() => navigate(`/epreuves/passage/${e.id}`, { state: { enonce: e.enonce } })}
+                  disabled={demarrer.isPending}
+                  onClick={() => {
+                    setErreurDemarrage(null);
+                    demarrer.mutate(e.id);
+                  }}
                 >
-                  Commencer
+                  {demarrer.isPending && demarrer.variables === e.id
+                    ? "Préparation…"
+                    : e.dernierPassage
+                      ? "Repasser l'épreuve"
+                      : "Commencer"}
                 </Button>
               </Card>
             ))}

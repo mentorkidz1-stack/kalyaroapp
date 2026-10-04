@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { Card, Button, Badge, FormField, fieldInputClass, Spinner, MathText } from "../../design-system";
+import { EpreuveQuestionsPanel } from "./EpreuveQuestionsPanel";
 
 interface Classe {
   id: string;
@@ -23,10 +24,108 @@ interface UEMatiere {
   id: string;
   nom: string;
 }
-interface Epreuve {
+interface MetadonneesEpreuve {
+  annee: number | null;
+  session: string | null;
+  examen: string | null;
+  etablissementSource: string | null;
+  dureeMinutes: number | null;
+  bareme: number | null;
+}
+interface Epreuve extends MetadonneesEpreuve {
   id: string;
   enonce: string;
   sourceCorrige: "FOURNI" | "GENERE";
+  _count: { questions: number };
+}
+
+/** Champs de métadonnées tels que saisis dans un formulaire (tout en texte). */
+type MetaFormulaire = Record<keyof MetadonneesEpreuve, string>;
+const META_VIDE: MetaFormulaire = { annee: "", session: "", examen: "", etablissementSource: "", dureeMinutes: "", bareme: "" };
+const metaVersFormulaire = (e: MetadonneesEpreuve): MetaFormulaire => ({
+  annee: e.annee?.toString() ?? "",
+  session: e.session ?? "",
+  examen: e.examen ?? "",
+  etablissementSource: e.etablissementSource ?? "",
+  dureeMinutes: e.dureeMinutes?.toString() ?? "",
+  bareme: e.bareme?.toString() ?? "",
+});
+const nombreOuNull = (v: string) => (v.trim() ? Number(v.replace(",", ".")) : null);
+const texteOuNull = (v: string) => (v.trim() ? v.trim() : null);
+const metaVersApi = (m: MetaFormulaire) => ({
+  annee: nombreOuNull(m.annee),
+  session: texteOuNull(m.session),
+  examen: texteOuNull(m.examen),
+  etablissementSource: texteOuNull(m.etablissementSource),
+  dureeMinutes: nombreOuNull(m.dureeMinutes),
+  bareme: nombreOuNull(m.bareme),
+});
+
+function ChampsMetadonnees({ valeur, onChange }: { valeur: MetaFormulaire; onChange: (m: MetaFormulaire) => void }) {
+  const champ = (cle: keyof MetaFormulaire, placeholder: string, className = "") => (
+    <input
+      className={`${fieldInputClass} ${className}`}
+      placeholder={placeholder}
+      value={valeur[cle]}
+      inputMode={cle === "annee" || cle === "dureeMinutes" || cle === "bareme" ? "decimal" : undefined}
+      onChange={(e) => onChange({ ...valeur, [cle]: e.target.value })}
+    />
+  );
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      {champ("examen", "Examen (ex. Partiel L1)")}
+      {champ("session", "Session (ex. Rattrapage)")}
+      {champ("annee", "Année (ex. 2025)")}
+      {champ("etablissementSource", "Université / faculté d'origine")}
+      {champ("dureeMinutes", "Durée (minutes)")}
+      {champ("bareme", "Barème (ex. 20)")}
+    </div>
+  );
+}
+
+function BadgesEpreuve({ e }: { e: Epreuve }) {
+  const elements = [
+    e.examen,
+    e.session,
+    e.annee?.toString(),
+    e.etablissementSource,
+    e.bareme ? `sur ${e.bareme}` : null,
+    e.dureeMinutes ? `${e.dureeMinutes} min` : null,
+  ].filter(Boolean);
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-1">
+      {elements.map((t) => (
+        <Badge key={t} variant="manual">
+          {t}
+        </Badge>
+      ))}
+      <Badge variant={e._count.questions > 0 ? "ok" : "warn"}>
+        {e._count.questions > 0 ? `${e._count.questions} question(s)` : "non découpée"}
+      </Badge>
+    </div>
+  );
+}
+
+function MetadonneesEditables({ epreuve, onSaved }: { epreuve: Epreuve; onSaved: () => void }) {
+  const [meta, setMeta] = useState<MetaFormulaire>(metaVersFormulaire(epreuve));
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () => api.patch(`/api/admin/epreuves/${epreuve.id}`, metaVersApi(meta)),
+    onSuccess: () => {
+      setError(null);
+      onSaved();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
+  });
+  return (
+    <div className="mt-3 space-y-2">
+      <ChampsMetadonnees valeur={meta} onChange={setMeta} />
+      <Button type="button" variant="ghost" className="w-auto" disabled={save.isPending} onClick={() => save.mutate()}>
+        {save.isPending ? "Enregistrement…" : "Enregistrer les informations"}
+      </Button>
+      {error && <p className="text-sm text-alert">{error}</p>}
+    </div>
+  );
 }
 interface CorrigeType {
   id: string;
@@ -193,6 +292,7 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"TEXTE" | "PDF">("TEXTE");
   const [enonce, setEnonce] = useState("");
+  const [meta, setMeta] = useState<MetaFormulaire>(META_VIDE);
   const [file, setFile] = useState<File | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -205,9 +305,11 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["epreuves", matiereId] });
 
   const create = useMutation({
-    mutationFn: () => api.post(`/api/admin/matieres/${matiereId}/epreuves`, { enonce, sourceCorrige: "FOURNI" }),
+    mutationFn: () =>
+      api.post(`/api/admin/matieres/${matiereId}/epreuves`, { enonce, sourceCorrige: "FOURNI", ...metaVersApi(meta) }),
     onSuccess: () => {
       setEnonce("");
+      setMeta(META_VIDE);
       invalidate();
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
@@ -217,6 +319,7 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
     mutationFn: (formData: FormData) => api.upload(`/api/admin/matieres/${matiereId}/epreuves`, formData),
     onSuccess: () => {
       setFile(null);
+      setMeta(META_VIDE);
       invalidate();
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
@@ -234,6 +337,7 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
       }
       const formData = new FormData();
       formData.append("sourceCorrige", "FOURNI");
+      for (const [cle, valeur] of Object.entries(meta)) if (valeur.trim()) formData.append(cle, valeur.trim());
       formData.append("pdf", file);
       createFromPdf.mutate(formData);
     }
@@ -246,6 +350,7 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
       <div className="space-y-2 mb-4">
         {epreuves?.map((e) => (
           <div key={e.id} className="border border-line rounded-[14px] p-3">
+            <BadgesEpreuve e={e} />
             <button
               type="button"
               onClick={() => setSelected(selected === e.id ? null : e.id)}
@@ -253,7 +358,16 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
             >
               <MathText text={e.enonce} />
             </button>
-            {selected === e.id && <CorrigesList epreuveId={e.id} />}
+            {selected === e.id && (
+              <>
+                <MetadonneesEditables epreuve={e} onSaved={invalidate} />
+                <EpreuveQuestionsPanel epreuveId={e.id} bareme={e.bareme} />
+                <div className="mt-3 text-[11px] font-mono text-ink-soft">
+                  CORRIGÉS DE L'ÉPREUVE ENTIÈRE {e._count.questions > 0 ? "(non utilisés : l'épreuve est découpée)" : "(utilisés tant qu'elle n'est pas découpée)"}
+                </div>
+                <CorrigesList epreuveId={e.id} />
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -276,6 +390,9 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
         >
           PDF
         </button>
+      </div>
+      <div className="mb-2">
+        <ChampsMetadonnees valeur={meta} onChange={setMeta} />
       </div>
       <div className="flex gap-2">
         {mode === "TEXTE" ? (

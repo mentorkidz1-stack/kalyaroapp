@@ -59,7 +59,7 @@ export const router = createBrowserRouter([
       { path: "revisions/seance", element: <RevisionSessionPage /> },
       { path: "parcours/:chapitreId/qcm/:notionId", element: <QcmSessionPage /> },
       { path: "parcours/:chapitreId/saisie-libre/:notionId", element: <SaisieLibrePage /> },
-      { path: "epreuves/passage/:epreuveId", element: <EpreuveSessionPage /> },
+      { path: "epreuves/passages/:passageId", element: <EpreuveSessionPage /> },
       { path: "evaluations/passage/:evaluationId", element: <EvaluationSessionPage /> },
       { path: "evaluations/copie/:copieId", element: <EvaluationResultPage /> },
       {

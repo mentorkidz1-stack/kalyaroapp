@@ -28,6 +28,16 @@ interface AreteProposee {
   notion: { nom: string };
   prerequisNotion: { nom: string };
 }
+interface CorrigeQuestionAValider {
+  id: string;
+  contenu: string;
+  questionEpreuve: {
+    numero: string;
+    enonce: string;
+    points: number;
+    epreuve: { enonce: string; examen: string | null; annee: number | null };
+  };
+}
 interface CorrigeAValider {
   id: string;
   contenu: string;
@@ -43,6 +53,7 @@ export function ValidationQueuePage() {
       <FichesQueue />
       <AretesQueue />
       <CorrigesQueue />
+      <CorrigesQuestionsQueue />
     </div>
   );
 }
@@ -271,6 +282,62 @@ function CorrigesQueue() {
           </Button>
         </div>
       ))}
+    </QueueCard>
+  );
+}
+
+function CorrigesQuestionsQueue() {
+  const queryClient = useQueryClient();
+  const queryKey = ["validation-corriges-questions"];
+  const { data, isLoading } = useQuery({
+    queryKey,
+    queryFn: () => api.get<CorrigeQuestionAValider[]>("/api/admin/corriges-questions/a-valider"),
+  });
+  const valider = useMutation({
+    mutationFn: (id: string) => api.patch(`/api/admin/corriges-questions/${id}`, { statutValidation: "VALIDE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+  const rejeter = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/admin/corriges-questions/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
+  return (
+    <QueueCard title="Corrigés de questions d'épreuve (IA)" loading={isLoading} empty={(data?.length ?? 0) === 0}>
+      {data?.map((c) => {
+        const e = c.questionEpreuve.epreuve;
+        return (
+          <div key={c.id} className="border border-line rounded-[14px] p-3">
+            <div className="text-[11px] font-mono text-ink-soft mb-1">
+              {[e.examen, e.annee].filter(Boolean).join(" · ") || "Épreuve"} — question {c.questionEpreuve.numero} (
+              {c.questionEpreuve.points} pts)
+            </div>
+            <p className="text-xs text-ink mb-2">
+              <MathText text={c.questionEpreuve.enonce} />
+            </p>
+            <p className="text-sm text-ink whitespace-pre-wrap mb-2">
+              <MathText text={c.contenu} />
+            </p>
+            <p className="text-[11px] text-ink-soft mb-2">
+              Ce corrigé servira de référence pour noter les copies : vérifie chaque calcul.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button type="button" variant="ghost" className="w-auto" onClick={() => valider.mutate(c.id)}>
+                Valider
+              </Button>
+              <button
+                type="button"
+                className="text-alert text-xs font-mono"
+                onClick={() => {
+                  if (window.confirm("Rejeter et supprimer ce corrigé ?")) rejeter.mutate(c.id);
+                }}
+              >
+                Rejeter
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </QueueCard>
   );
 }

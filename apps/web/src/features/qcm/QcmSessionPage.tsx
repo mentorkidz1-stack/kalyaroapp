@@ -38,7 +38,7 @@ const celebrations: Partial<Record<NiveauMaitrise, { titre: string; sousTitre: s
 };
 
 interface QcmLocationState {
-  returnToEpreuve?: { epreuveId: string; enonce: string };
+  returnToEpreuve?: { passageId: string };
 }
 
 export function QcmSessionPage() {
@@ -122,9 +122,7 @@ export function QcmSessionPage() {
               {returnToEpreuve && (
                 <Button
                   onClick={() =>
-                    navigate(`/epreuves/passage/${returnToEpreuve.epreuveId}`, {
-                      state: { enonce: returnToEpreuve.enonce },
-                    })
+                    navigate(`/epreuves/passages/${returnToEpreuve.passageId}`)
                   }
                 >
                   Retourner à l'épreuve
