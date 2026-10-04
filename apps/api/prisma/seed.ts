@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { libelleReponseAttendue, verifierQuestionSurFigure, type ReponseAttendue } from "@kalyaro/shared";
 import { PrismaClient, type Difficulte } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -65,6 +66,32 @@ async function creerQcm(chapitreId: string, notionId: string, questions: Qcm[]) 
       },
     });
   }
+}
+
+/** Question à réponse sur figure (placer un point, lire une valeur) — chantier 2.4. */
+async function creerQcmSurFigure(
+  chapitreId: string,
+  notionId: string,
+  q: { enonce: string; figure: object; reponseAttendue: ReponseAttendue; difficulte?: Difficulte }
+) {
+  const erreurs = verifierQuestionSurFigure(q.reponseAttendue.type, q.figure, q.reponseAttendue);
+  if (erreurs.length) throw new Error(`Seed incohérent : ${q.enonce} (${erreurs.join(", ")})`);
+  await prisma.questionQcm.create({
+    data: {
+      chapitreId,
+      enonce: q.enonce,
+      choix: [],
+      bonneReponse: libelleReponseAttendue(q.reponseAttendue),
+      typeReponse: q.reponseAttendue.type,
+      reponseAttendue: q.reponseAttendue,
+      figure: q.figure,
+      difficulte: q.difficulte ?? "MOYEN",
+      source: "MANUEL",
+      statut: "PUBLIE",
+      createdById: adminId,
+      notions: { create: [{ notionId }] },
+    },
+  });
 }
 
 async function creerNotions(chapitreId: string, notions: { nom: string; description: string }[]) {
@@ -171,6 +198,27 @@ async function seedUniversitaire(niveauId: string) {
       bonneReponse: "ℝ privé de 4",
     },
   ]);
+  await creerQcmSurFigure(analyse.id, fonctions!.id, {
+    enonce:
+      "Au marché Dantokpa, le prix d'équilibre se lit à l'intersection de l'offre et de la demande. " +
+      "Lis sur le graphique ce prix d'équilibre p.",
+    figure: {
+      type: "repere",
+      xMin: 0,
+      xMax: 10,
+      yMin: 0,
+      yMax: 10,
+      grille: true,
+      legendeX: "q",
+      legendeY: "p",
+      elements: [
+        { type: "courbe", expression: "10 − 0,8x", nom: "Demande" },
+        { type: "courbe", expression: "2 + 0,8x", nom: "Offre" },
+      ],
+    },
+    reponseAttendue: { type: "LIRE_VALEUR", valeur: 6, tolerance: 0.2, unite: "milliers de F CFA" },
+    difficulte: "FACILE",
+  });
   await creerQcm(analyse.id, derivees!.id, [
     { enonce: "Si f(x) = x³, alors f'(x) = ?", choix: ["3x²", "x²", "3x³", "x⁴ ÷ 4"], bonneReponse: "3x²", difficulte: "FACILE" },
     { enonce: "Si f(x) = 5x² − 3x + 7, alors f'(x) = ?", choix: ["10x − 3", "5x − 3", "10x + 7", "10x² − 3"], bonneReponse: "10x − 3" },
@@ -196,6 +244,19 @@ async function seedUniversitaire(niveauId: string) {
     },
     { enonce: "La fonction f(x) = x² − 4x + 1 atteint son minimum en :", choix: ["x = 2", "x = −2", "x = 4", "x = 1"], bonneReponse: "x = 2" },
   ]);
+  await creerQcmSurFigure(analyse.id, variations!.id, {
+    enonce: "Voici la courbe de f(x) = x² − 4x + 1. Place sur le repère le point où f atteint son minimum.",
+    figure: {
+      type: "repere",
+      xMin: -1,
+      xMax: 5,
+      yMin: -4,
+      yMax: 6,
+      grille: true,
+      elements: [{ type: "courbe", expression: "x² − 4x + 1", nom: "𝒞f" }],
+    },
+    reponseAttendue: { type: "PLACER_POINT", x: 2, y: -3, tolerance: 0.25, pasGrille: 0.5 },
+  });
   await creerQcm(analyse.id, optimisation!.id, [
     {
       enonce: "Le profit d'une entreprise est π(q) = −2q² + 40q − 50. Quelle quantité q maximise le profit ?",

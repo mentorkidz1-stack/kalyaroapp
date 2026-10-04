@@ -6,7 +6,6 @@ import { AppHeader } from "../../components/AppHeader";
 import {
   Button,
   Card,
-  ChoiceButton,
   FeedbackBlock,
   LoadingState,
   EmptyState,
@@ -15,9 +14,9 @@ import {
   niveauAMonte,
   type NiveauMaitrise,
   MathText,
-  FigureRenderer,
 } from "../../design-system";
 import { useQcmNext, useSubmitQcm, useTentativeIndice, type RepondreResult } from "./useQcm";
+import { QuestionQcmCorps } from "./QuestionQcmCorps";
 
 const celebrations: Partial<Record<NiveauMaitrise, { titre: string; sousTitre: string; message: string }>> = {
   ACQUIS_DU_JOUR: {
@@ -164,20 +163,14 @@ export function QcmSessionPage() {
         {question && (
           <Card className={`transition-opacity duration-150 ${isTransitioning ? "opacity-0" : "opacity-100"}`}>
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
-            {question.figure != null && <FigureRenderer figure={question.figure} />}
-            {question.choix.map((choix) => {
-              const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
-              return (
-                <ChoiceButton
-                  key={choix}
-                  state={state}
-                  disabled={!!result || submitMutation.isPending}
-                  onClick={() => handleChoice(choix)}
-                >
-                  <MathText text={choix} />
-                </ChoiceButton>
-              );
-            })}
+            <QuestionQcmCorps
+              key={question.attemptToken}
+              question={question}
+              selected={selected}
+              correcte={result ? result.correcte : null}
+              disabled={submitMutation.isPending}
+              onRepondre={handleChoice}
+            />
 
             {submitError && (
               <div className="mt-3">

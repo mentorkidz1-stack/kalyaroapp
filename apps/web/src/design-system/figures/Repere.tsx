@@ -1,11 +1,23 @@
-import { compilerExpression, type FigureRepere } from "@kalyaro/shared";
+import { aimanter, compilerExpression, type FigureRepere } from "@kalyaro/shared";
 import { COULEURS, DefsFleches, Etiquette, LARGEUR, PALETTE, formatNombre, graduations, pasRond } from "./outils";
 
 const MARGE_BASE = { droite: 14, haut: 16 };
 const ECHANTILLONS = 480;
 
+/** Réponse « placer un point » : l'étudiant touche le repère, le point s'aimante à la grille. */
+export interface InteractionRepere {
+  point: [number, number] | null;
+  onPlacer: (x: number, y: number) => void;
+  /** Pas d'aimantation ; à défaut, un dixième de graduation. */
+  pasGrille?: number | null;
+  desactive?: boolean;
+  /** Après correction : le point prend la couleur du verdict (la position attendue n'est pas
+   * dévoilée, comme pour les QCM à choix : l'indice guide, la question peut revenir). */
+  correct?: boolean | null;
+}
+
 /** Repère : axes gradués, grille, points, droites, courbes, segments, vecteurs, zones. */
-export function Repere({ figure, id }: { figure: FigureRepere; id: string }) {
+export function Repere({ figure, id, interaction }: { figure: FigureRepere; id: string; interaction?: InteractionRepere }) {
   const { xMin, xMax, yMin, yMax } = figure;
   // Axe collé au bord (repère économique q ≥ 0, p ≥ 0) : de la place pour les graduations.
   const MARGE = { ...MARGE_BASE, gauche: xMin >= 0 ? 34 : 16, bas: yMin >= 0 ? 26 : 16 };
@@ -24,6 +36,24 @@ export function Repere({ figure, id }: { figure: FigureRepere; id: string }) {
   const axeX = Y(Math.min(Math.max(0, yMin), yMax));
   const axeY = X(Math.min(Math.max(0, xMin), xMax));
   const clip = `${id}-zone`;
+
+  // Toucher → coordonnées du repère. onClick (et non pointerdown) : un glissement du doigt
+  // reste un défilement de la page, seul un vrai toucher place le point.
+  const placer = (e: React.MouseEvent<SVGRectElement>) => {
+    if (!interaction || interaction.desactive) return;
+    const svg = e.currentTarget.ownerSVGElement;
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm) return;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    const pas = interaction.pasGrille ?? pasX / 10;
+    const borne = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+    const x = aimanter(borne(xMin + ((p.x - MARGE.gauche) / largeurUtile) * (xMax - xMin), xMin, xMax), pas);
+    const y = aimanter(borne(yMax - ((p.y - MARGE.haut) / hauteurUtile) * (yMax - yMin), yMin, yMax), pas);
+    interaction.onPlacer(x, y);
+  };
+  const posePoint = interaction?.point;
+  const couleurPose =
+    interaction?.correct === true ? COULEURS.principale : interaction?.correct === false ? COULEURS.alerte : COULEURS.principaleProfonde;
 
   const courbe = (expr: string, de: number, a: number): string => {
     const r = compilerExpression(expr);
@@ -209,6 +239,31 @@ export function Repere({ figure, id }: { figure: FigureRepere; id: string }) {
           return null;
         });
       })()}
+
+      {interaction && (
+        <>
+          {posePoint && (
+            <g pointerEvents="none">
+              {/* Pointillés vers les axes : aident à lire les coordonnées du point posé. */}
+              <g stroke={couleurPose} strokeWidth={1.2} strokeDasharray="3 3" opacity={0.8}>
+                <line x1={X(posePoint[0])} y1={Y(posePoint[1])} x2={X(posePoint[0])} y2={axeX} />
+                <line x1={X(posePoint[0])} y1={Y(posePoint[1])} x2={axeY} y2={Y(posePoint[1])} />
+              </g>
+              <circle cx={X(posePoint[0])} cy={Y(posePoint[1])} r={6} fill={couleurPose} stroke={COULEURS.fond} strokeWidth={2} />
+            </g>
+          )}
+          <rect
+            x={MARGE.gauche}
+            y={MARGE.haut}
+            width={largeurUtile}
+            height={hauteurUtile}
+            fill="transparent"
+            style={{ cursor: interaction.desactive ? "default" : "crosshair" }}
+            onClick={placer}
+            data-testid="zone-placement"
+          />
+        </>
+      )}
     </svg>
   );
 }

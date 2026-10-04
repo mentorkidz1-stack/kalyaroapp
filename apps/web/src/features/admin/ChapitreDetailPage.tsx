@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { Card, Button, Badge, FormField, fieldInputClass, Spinner, Table, Th, Td, MathText, FigureRenderer } from "../../design-system";
+import { lireNombre, verifierQuestionSurFigure, type ReponseAttendue, type TypeReponse } from "@kalyaro/shared";
 import { EditeurFigure } from "./EditeurFigure";
 
 interface Notion {
@@ -30,6 +31,8 @@ interface QuestionQcm {
   _count: { variantes: number };
   /** Figure dessinée par l'application (description JSON validée). */
   figure?: unknown;
+  typeReponse: TypeReponse;
+  reponseAttendue: ReponseAttendue | null;
 }
 interface ResultatVariantesLot {
   questionsTraitees: number;
@@ -351,20 +354,26 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
   const [notionIds, setNotionIds] = useState<string[]>([]);
   const [figure, setFigure] = useState<unknown | null>(null);
   const [figureValide, setFigureValide] = useState(true);
+  // Réponse sur figure : valeurs saisies en texte (virgule décimale acceptée).
+  const [typeReponse, setTypeReponse] = useState<TypeReponse>("CHOIX");
+  const [attendu, setAttendu] = useState(ATTENDU_VIDE);
   const [nombreIa, setNombreIa] = useState(5);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["questions-qcm", chapitreId] });
 
+  const reponseAttendue = construireReponseAttendue(typeReponse, attendu);
+  const erreursFigure = typeReponse === "CHOIX" ? [] : verifierQuestionSurFigure(typeReponse, figure, reponseAttendue);
+
   const create = useMutation({
     mutationFn: () =>
       api.post(`/api/admin/chapitres/${chapitreId}/questions-qcm`, {
         enonce,
-        choix: choix.filter((c) => c.trim()),
-        bonneReponse,
+        typeReponse,
         difficulte: "MOYEN",
         notionIds,
+        ...(typeReponse === "CHOIX" ? { choix: choix.filter((c) => c.trim()), bonneReponse } : { reponseAttendue }),
         ...(figure != null ? { figure } : {}),
       }),
     onSuccess: () => {
@@ -375,6 +384,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
       setNotionIds([]);
       setFigure(null);
       setFigureValide(true);
+      setAttendu(ATTENDU_VIDE);
       invalidate();
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
@@ -465,6 +475,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
               <Badge variant={q.source === "IA" ? "ai" : "manual"}>{q.source}</Badge>
               <Badge variant={q.statut === "PUBLIE" ? "ok" : "warn"}>{q.statut}</Badge>
               {q.varianteDeId && <Badge variant="manual">Variante</Badge>}
+              {q.typeReponse !== "CHOIX" && <Badge variant="manual">{LIBELLES_TYPE[q.typeReponse]}</Badge>}
               {q._count.variantes > 0 && (
                 <span className="text-[11px] font-mono text-ink-soft">{q._count.variantes} variante(s)</span>
               )}
@@ -475,7 +486,23 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
               ))}
             </div>
             <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
-            {q.figure != null && <FigureRenderer figure={q.figure} afficherErreurs />}
+            {q.figure != null && (
+              <FigureRenderer
+                figure={q.figure}
+                afficherErreurs
+                interaction={
+                  q.reponseAttendue?.type === "PLACER_POINT"
+                    ? { point: [q.reponseAttendue.x, q.reponseAttendue.y], onPlacer: () => {}, desactive: true, correct: true }
+                    : undefined
+                }
+              />
+            )}
+            {q.typeReponse !== "CHOIX" && (
+              <p className="text-xs text-primary-deep font-bold mb-2">
+                Attendu : {q.bonneReponse}
+                {q.reponseAttendue && ` (tolérance ± ${String(q.reponseAttendue.tolerance).replace(".", ",")})`}
+              </p>
+            )}
             <ul className="text-xs text-ink-soft mb-2 list-disc list-inside">
               {q.choix.map((c) => (
                 <li key={c} className={c === q.bonneReponse ? "text-primary-deep font-bold" : ""}>
@@ -489,7 +516,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
                   Publier
                 </button>
               )}
-              {q.statut === "PUBLIE" && (
+              {q.statut === "PUBLIE" && q.typeReponse === "CHOIX" && (
                 <button
                   type="button"
                   className="text-primary-deep text-xs font-mono disabled:opacity-50"
@@ -523,24 +550,50 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
             onChange={(e) => setEnonce(e.target.value)}
           />
         </FormField>
-        <div className="grid grid-cols-2 gap-2">
-          {choix.map((c, i) => (
-            <input
-              key={i}
-              className={fieldInputClass}
-              placeholder={`Choix ${i + 1}`}
-              value={c}
-              onChange={(e) => {
-                const next = [...choix];
-                next[i] = e.target.value;
-                setChoix(next);
-              }}
-            />
-          ))}
-        </div>
-        <FormField label="Bonne réponse (doit correspondre exactement à un choix)">
-          <input className={fieldInputClass} value={bonneReponse} onChange={(e) => setBonneReponse(e.target.value)} />
+        <FormField label="Type de réponse">
+          <select className={fieldInputClass} value={typeReponse} onChange={(e) => setTypeReponse(e.target.value as TypeReponse)}>
+            <option value="CHOIX">Choix multiples</option>
+            <option value="PLACER_POINT">{LIBELLES_TYPE.PLACER_POINT} (dans un repère)</option>
+            <option value="LIRE_VALEUR">{LIBELLES_TYPE.LIRE_VALEUR} (sur la figure)</option>
+          </select>
         </FormField>
+        {typeReponse === "CHOIX" && (
+          <>
+          <div className="grid grid-cols-2 gap-2">
+            {choix.map((c, i) => (
+              <input
+                key={i}
+                className={fieldInputClass}
+                placeholder={`Choix ${i + 1}`}
+                value={c}
+                onChange={(e) => {
+                  const next = [...choix];
+                  next[i] = e.target.value;
+                  setChoix(next);
+                }}
+              />
+            ))}
+          </div>
+          <FormField label="Bonne réponse (doit correspondre exactement à un choix)">
+            <input className={fieldInputClass} value={bonneReponse} onChange={(e) => setBonneReponse(e.target.value)} />
+          </FormField>
+          </>
+        )}
+        {typeReponse !== "CHOIX" && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {CHAMPS_ATTENDU[typeReponse].map(([cle, label, exemple]) => (
+              <FormField key={cle} label={label}>
+                <input
+                  className={fieldInputClass}
+                  inputMode={cle === "unite" ? "text" : "decimal"}
+                  value={attendu[cle]}
+                  placeholder={exemple}
+                  onChange={(e) => setAttendu({ ...attendu, [cle]: e.target.value })}
+                />
+              </FormField>
+            ))}
+          </div>
+        )}
         <FormField label="Notions testées">
           <select
             multiple
@@ -562,11 +615,36 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
             setFigureValide(valide);
           }}
         />
+        {typeReponse === "PLACER_POINT" && figureValide && (figure as { type?: string } | null)?.type === "repere" && (
+          <div className="border border-line rounded-[10px] p-2">
+            <p className="text-xs text-ink-soft">Touchez le repère pour poser le point attendu (ou saisissez x et y).</p>
+            <FigureRenderer
+              figure={figure}
+              interaction={{
+                point: reponseAttendue?.type === "PLACER_POINT" ? [reponseAttendue.x, reponseAttendue.y] : null,
+                pasGrille: lireNombre(attendu.pasGrille) ?? null,
+                onPlacer: (x, y) => setAttendu({ ...attendu, x: String(x).replace(".", ","), y: String(y).replace(".", ",") }),
+              }}
+            />
+          </div>
+        )}
+        {typeReponse !== "CHOIX" && erreursFigure.length > 0 && (
+          <ul className="text-xs text-alert list-disc list-inside">
+            {erreursFigure.map((e) => (
+              <li key={e}>{e}</li>
+            ))}
+          </ul>
+        )}
         <Button
           type="button"
           className="w-auto"
           onClick={() => create.mutate()}
-          disabled={!enonce.trim() || !bonneReponse.trim() || notionIds.length === 0 || !figureValide}
+          disabled={
+            !enonce.trim() ||
+            (typeReponse === "CHOIX" ? !bonneReponse.trim() : erreursFigure.length > 0) ||
+            notionIds.length === 0 ||
+            !figureValide
+          }
         >
           Créer le QCM
         </Button>
@@ -574,6 +652,47 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
       {error && <p className="text-sm text-alert mt-2">{error}</p>}
     </Card>
   );
+}
+
+const LIBELLES_TYPE: Record<TypeReponse, string> = {
+  CHOIX: "Choix multiples",
+  PLACER_POINT: "Placer un point",
+  LIRE_VALEUR: "Lire une valeur",
+};
+
+const ATTENDU_VIDE = { x: "", y: "", valeur: "", tolerance: "", pasGrille: "0,5", unite: "" };
+type ChampAttendu = keyof typeof ATTENDU_VIDE;
+
+const CHAMPS_ATTENDU: Record<"PLACER_POINT" | "LIRE_VALEUR", [ChampAttendu, string, string][]> = {
+  PLACER_POINT: [
+    ["x", "x attendu", ""],
+    ["y", "y attendu", ""],
+    ["tolerance", "Tolérance (±)", "0,25"],
+    ["pasGrille", "Aimant (pas)", "0,5"],
+  ],
+  LIRE_VALEUR: [
+    ["valeur", "Valeur attendue", ""],
+    ["tolerance", "Tolérance (±)", "0,1"],
+    ["unite", "Unité (facultatif)", "k F"],
+  ],
+};
+
+/** Réponse attendue à partir des champs du formulaire ; undefined tant qu'elle est incomplète. */
+function construireReponseAttendue(type: TypeReponse, c: typeof ATTENDU_VIDE): ReponseAttendue | undefined {
+  const tolerance = lireNombre(c.tolerance);
+  if (type === "PLACER_POINT") {
+    const x = lireNombre(c.x);
+    const y = lireNombre(c.y);
+    const pas = lireNombre(c.pasGrille);
+    if (x === null || y === null || tolerance === null || tolerance <= 0) return undefined;
+    return { type, x, y, tolerance, ...(pas && pas > 0 ? { pasGrille: pas } : {}) };
+  }
+  if (type === "LIRE_VALEUR") {
+    const valeur = lireNombre(c.valeur);
+    if (valeur === null || tolerance === null || tolerance < 0) return undefined;
+    return { type, valeur, tolerance, ...(c.unite.trim() ? { unite: c.unite.trim() } : {}) };
+  }
+  return undefined;
 }
 
 function SaisieLibreSection({ chapitreId }: { chapitreId: string }) {

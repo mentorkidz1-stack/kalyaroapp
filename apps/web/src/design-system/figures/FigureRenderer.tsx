@@ -3,7 +3,9 @@ import { validerFigure } from "@kalyaro/shared";
 import { Arbre } from "./Arbre";
 import { Diagramme } from "./Diagrammes";
 import { Geometrie } from "./Geometrie";
-import { Repere } from "./Repere";
+import { Repere, type InteractionRepere } from "./Repere";
+
+export type { InteractionRepere };
 import { TableauSignes, TableauVariations } from "./Tableaux";
 
 /**
@@ -11,7 +13,16 @@ import { TableauSignes, TableauVariations } from "./Tableaux";
  * est revalidée ici : si elle est invalide (donnée ancienne, saisie manuelle…), on affiche un
  * message plutôt qu'un dessin faux. `afficherErreurs` détaille les erreurs (écrans admin).
  */
-export function FigureRenderer({ figure, afficherErreurs = false }: { figure: unknown; afficherErreurs?: boolean }) {
+export function FigureRenderer({
+  figure,
+  afficherErreurs = false,
+  interaction,
+}: {
+  figure: unknown;
+  afficherErreurs?: boolean;
+  /** Réponse « placer un point » (repère uniquement). */
+  interaction?: InteractionRepere;
+}) {
   const id = useId().replace(/:/g, "");
   const resultat = useMemo(() => validerFigure(figure), [figure]);
 
@@ -34,7 +45,7 @@ export function FigureRenderer({ figure, afficherErreurs = false }: { figure: un
   const dessin = (() => {
     switch (f.type) {
       case "repere":
-        return <Repere figure={f} id={id} />;
+        return <Repere figure={f} id={id} interaction={interaction} />;
       case "tableau_variations":
         return <TableauVariations figure={f} id={id} />;
       case "tableau_signes":

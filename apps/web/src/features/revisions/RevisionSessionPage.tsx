@@ -6,7 +6,6 @@ import { AppHeader } from "../../components/AppHeader";
 import {
   Button,
   Card,
-  ChoiceButton,
   EmptyState,
   ErrorState,
   FeedbackBlock,
@@ -15,8 +14,8 @@ import {
   MasteryCelebration,
   niveauAMonte,
   MathText,
-  FigureRenderer,
 } from "../../design-system";
+import { QuestionQcmCorps } from "../qcm/QuestionQcmCorps";
 import { useSubmitQcm, useTentativeIndice, type NextQcm, type RepondreResult } from "../qcm/useQcm";
 import { REVISIONS_DUES_KEY, type RevisionsDues } from "./useRevisions";
 
@@ -157,20 +156,14 @@ export function RevisionSessionPage() {
         {question && !enChargement && (
           <Card>
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
-            {question.figure != null && <FigureRenderer figure={question.figure} />}
-            {question.choix.map((choix) => {
-              const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
-              return (
-                <ChoiceButton
-                  key={choix}
-                  state={state}
-                  disabled={!!result || submitMutation.isPending}
-                  onClick={() => handleChoice(choix)}
-                >
-                  <MathText text={choix} />
-                </ChoiceButton>
-              );
-            })}
+            <QuestionQcmCorps
+              key={question.attemptToken}
+              question={question}
+              selected={selected}
+              correcte={result ? result.correcte : null}
+              disabled={submitMutation.isPending}
+              onRepondre={handleChoice}
+            />
 
             {submitError && (
               <div className="mt-3">

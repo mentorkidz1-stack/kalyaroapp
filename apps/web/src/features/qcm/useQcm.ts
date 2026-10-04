@@ -11,6 +11,10 @@ export interface NextQcm {
   estVariante: boolean;
   /** Figure dessinée par l'application (description JSON validée). */
   figure?: unknown;
+  /** Réponse par choix, ou sur la figure (placer un point, lire une valeur). */
+  typeReponse?: "CHOIX" | "PLACER_POINT" | "LIRE_VALEUR";
+  /** Aides à la saisie sur figure : aimant de grille, unité de la valeur lue. */
+  interaction?: { pasGrille?: number | null; unite?: string | null } | null;
 }
 export interface FicheResume {
   id: string;

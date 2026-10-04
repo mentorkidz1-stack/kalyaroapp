@@ -3,9 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, ChoiceButton, ClavierMaths, LoadingState, EmptyState, ErrorState, MathText, FigureRenderer } from "../../design-system";
+import { Button, Card, ClavierMaths, LoadingState, EmptyState, ErrorState, MathText, FigureRenderer } from "../../design-system";
 import { BoutonPhotos, ConseilsPhoto, envoyerPhotos } from "./photos";
 import { useQcmNext, useSubmitQcm } from "../qcm/useQcm";
+import { QuestionQcmCorps } from "../qcm/QuestionQcmCorps";
 import {
   CorrectionView,
   RapportView,
@@ -417,20 +418,14 @@ function SondagePhase({
           <h3 className="font-display text-[17px] leading-snug text-ink mb-4">
             <MathText text={question.enonce} />
           </h3>
-          {question.figure != null && <FigureRenderer figure={question.figure} />}
-          {question.choix.map((choix) => {
-            const state = correcte !== null && selected === choix ? (correcte ? "correct" : "wrong") : "default";
-            return (
-              <ChoiceButton
-                key={choix}
-                state={state}
-                disabled={correcte !== null || submitQcm.isPending}
-                onClick={() => handleChoice(choix)}
-              >
-                <MathText text={choix} />
-              </ChoiceButton>
-            );
-          })}
+          <QuestionQcmCorps
+            key={question.attemptToken}
+            question={question}
+            selected={selected}
+            correcte={correcte}
+            disabled={submitQcm.isPending}
+            onRepondre={handleChoice}
+          />
           {phaseError && (
             <div className="mt-3">
               <ErrorState message={phaseError} />
