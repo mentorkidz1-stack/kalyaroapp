@@ -3,68 +3,28 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import {
-  Button,
-  Card,
-  ChoiceButton,
-  FeedbackBlock,
-  LoadingState,
-  EmptyState,
-  ErrorState,
-  MathText,
-} from "../../design-system";
+import { Button, Card, ChoiceButton, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
 import { useQcmNext, useSubmitQcm } from "../qcm/useQcm";
+import {
+  CorrectionView,
+  RapportView,
+  formatPoints,
+  sousTitreEpreuve,
+  titreEpreuve,
+  type Correction,
+  type Passage,
+  type Rapport,
+} from "./rapport";
 
 interface NotionRef {
   id: string;
   nom: string;
   chapitreId: string;
 }
-interface QuestionPassage {
-  cle: string;
-  numero: string;
-  enonce: string;
-  points: number;
-  notionNom: string | null;
-  imageUrls: string[];
-}
-interface Correction {
-  pointsObtenus: number;
-  pointsMax: number;
-  explication: string;
-  elementsReussis: string[];
-  elementsManquants: string[];
-}
-interface Passage {
-  passageId: string;
-  mode: "ENTRAINEMENT" | "EXAMEN_BLANC";
-  termine: boolean;
-  epreuve: {
-    id: string;
-    enonce: string;
-    decoupee: boolean;
-    annee: number | null;
-    session: string | null;
-    examen: string | null;
-    etablissementSource: string | null;
-    bareme: number;
-  };
-  questions: QuestionPassage[];
-  reponses: Record<string, Correction & { reponseDonnee: string }>;
-}
 interface ResultatQuestion extends Correction {
   cle: string;
   ratee: boolean;
   diagnostic: { diagnosticId: string; notionASonder: NotionRef } | null;
-}
-interface Rapport {
-  note: number;
-  bareme: number;
-  noteSur20: number;
-  nbQuestions: number;
-  nbRepondues: number;
-  parQuestion: { cle: string; numero: string; points: number; pointsObtenus: number; repondue: boolean; ratee: boolean }[];
-  parNotion: { notionId: string | null; notionNom: string; points: number; pointsObtenus: number; pointsPerdus: number }[];
 }
 interface AdvanceDiagnosticResult {
   resolu: false;
@@ -77,8 +37,6 @@ type Diagnostic =
   | { type: "propose"; diagnosticId: string; notion: NotionRef }
   | { type: "sondage"; diagnosticId: string; notion: NotionRef }
   | { type: "trouve"; notion: NotionRef };
-
-const formatPoints = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 
 /** Passage d'une épreuve question par question, avec correction sur barème et rapport final. */
 export function EpreuveSessionPage() {
@@ -157,11 +115,13 @@ export function EpreuveSessionPage() {
     },
   });
 
-  const titre = passage?.epreuve.examen ?? "Épreuve";
-  const sousTitre = passage
-    ? [passage.epreuve.session, passage.epreuve.annee, passage.epreuve.etablissementSource].filter(Boolean).join(" · ") ||
-      "Entraînement"
-    : "Kalyaro";
+  // Un examen blanc a son propre écran (chronomètre, pas de correction avant la fin).
+  useEffect(() => {
+    if (passage?.mode === "EXAMEN_BLANC") navigate(`/epreuves/examen/${passage.passageId}`, { replace: true });
+  }, [passage, navigate]);
+
+  const titre = passage ? titreEpreuve(passage) : "Épreuve";
+  const sousTitre = passage ? sousTitreEpreuve(passage, "Entraînement") : "Kalyaro";
 
   const rapportAffiche = rapport ?? rapportQuery.data ?? null;
   if (passage && rapportAffiche) {
@@ -171,6 +131,7 @@ export function EpreuveSessionPage() {
         <div className="max-w-lg mx-auto p-5">
           <RapportView
             rapport={rapportAffiche}
+            passage={passage}
             onRetour={() => navigate("/epreuves")}
             onRecommencer={() => recommencer.mutate()}
             recommencementEnCours={recommencer.isPending}
@@ -349,133 +310,6 @@ export function EpreuveSessionPage() {
         )}
 
         {passage && passage.questions.length === 0 && <EmptyState icon="📝" message="Cette épreuve n'a pas de question." />}
-      </div>
-    </div>
-  );
-}
-
-function CorrectionView({ correction }: { correction: Correction }) {
-  const reussi = correction.pointsObtenus >= correction.pointsMax / 2;
-  return (
-    <div className="fade-in space-y-3">
-      <div className="flex items-baseline gap-2">
-        <span className={`font-display font-extrabold text-2xl ${reussi ? "text-primary-deep" : "text-[#8A5A0E]"}`}>
-          {formatPoints(correction.pointsObtenus)}
-        </span>
-        <span className="text-sm text-ink-soft">/ {formatPoints(correction.pointsMax)} pts</span>
-      </div>
-      <FeedbackBlock variant={reussi ? "ok" : "warn"}>
-        <MathText text={correction.explication} />
-      </FeedbackBlock>
-      {correction.elementsReussis.length > 0 && (
-        <div>
-          <div className="text-[11px] font-mono uppercase text-primary-deep mb-1">Ce qui t'a rapporté des points</div>
-          <ul className="text-sm text-ink list-disc list-inside space-y-0.5">
-            {correction.elementsReussis.map((e) => (
-              <li key={e}>
-                <MathText text={e} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {correction.elementsManquants.length > 0 && (
-        <div>
-          <div className="text-[11px] font-mono uppercase text-[#8A5A0E] mb-1">Ce qui t'en a fait perdre</div>
-          <ul className="text-sm text-ink list-disc list-inside space-y-0.5">
-            {correction.elementsManquants.map((e) => (
-              <li key={e}>
-                <MathText text={e} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RapportView({
-  rapport,
-  onRetour,
-  onRecommencer,
-  recommencementEnCours,
-}: {
-  rapport: Rapport;
-  onRetour: () => void;
-  onRecommencer: () => void;
-  recommencementEnCours: boolean;
-}) {
-  const aTravailler = rapport.parNotion.filter((n) => n.pointsPerdus > 0).slice(0, 3);
-  return (
-    <div className="space-y-4">
-      <Card className="text-center py-6">
-        <div className="font-mono text-[11px] uppercase tracking-wide text-ink-soft mb-1">Ta note</div>
-        <div className="font-display font-extrabold text-4xl text-ink">
-          {formatPoints(rapport.note)} <span className="text-xl text-ink-soft">/ {formatPoints(rapport.bareme)}</span>
-        </div>
-        {rapport.bareme !== 20 && <div className="text-sm text-ink-soft mt-1">soit {formatPoints(rapport.noteSur20)} / 20</div>}
-        {rapport.nbRepondues < rapport.nbQuestions && (
-          <p className="text-xs text-ink-soft mt-2">
-            {rapport.nbQuestions - rapport.nbRepondues} question(s) sans réponse comptée(s) 0.
-          </p>
-        )}
-      </Card>
-
-      {aTravailler.length > 0 && (
-        <Card>
-          <div className="font-display font-bold text-base text-ink mb-2">Là où tu gagneras le plus de points</div>
-          <ol className="space-y-1.5 text-sm text-ink list-decimal list-inside">
-            {aTravailler.map((n) => (
-              <li key={n.notionId ?? n.notionNom}>
-                <strong>{n.notionNom}</strong> — {formatPoints(n.pointsPerdus)} pt(s) perdu(s)
-              </li>
-            ))}
-          </ol>
-        </Card>
-      )}
-
-      <Card>
-        <div className="font-display font-bold text-base text-ink mb-3">Détail par notion</div>
-        <div className="space-y-2.5">
-          {rapport.parNotion.map((n) => (
-            <div key={n.notionId ?? n.notionNom}>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-ink">{n.notionNom}</span>
-                <span className="font-mono text-ink-soft">
-                  {formatPoints(n.pointsObtenus)} / {formatPoints(n.points)}
-                </span>
-              </div>
-              <div className="h-2 bg-line rounded-lg overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-lg"
-                  style={{ width: `${n.points > 0 ? (n.pointsObtenus / n.points) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <div className="font-display font-bold text-base text-ink mb-2">Détail par question</div>
-        <ul className="divide-y divide-line">
-          {rapport.parQuestion.map((q) => (
-            <li key={q.cle} className="flex justify-between py-1.5 text-sm">
-              <span className="text-ink">Question {q.numero}</span>
-              <span className={`font-mono ${!q.repondue || q.ratee ? "text-[#8A5A0E]" : "text-primary-deep"}`}>
-                {q.repondue ? `${formatPoints(q.pointsObtenus)} / ${formatPoints(q.points)}` : "sans réponse"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      <div className="flex flex-col gap-2">
-        <Button onClick={onRetour}>Retour aux épreuves</Button>
-        <Button variant="ghost" onClick={onRecommencer} disabled={recommencementEnCours}>
-          {recommencementEnCours ? "Préparation…" : "Repasser cette épreuve"}
-        </Button>
       </div>
     </div>
   );

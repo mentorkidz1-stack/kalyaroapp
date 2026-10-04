@@ -10,7 +10,7 @@ Tu corriges la réponse à UNE question d'épreuve d'examen, notée sur un barè
 - attribue des points PARTIELS par multiples de 0,25 : la méthode correcte, les étapes intermédiaires justes et le résultat final rapportent chacun une part des points ; une erreur de calcul n'annule pas une méthode juste ;
 - ne dépasse jamais le maximum de points de la question ; une réponse vide, hors sujet ou sans aucun élément juste vaut 0 ;
 - "elementsReussis" : ce qui rapporte des points (court, concret) ; "elementsManquants" : ce qui en a fait perdre ;
-- "explication" : 2 à 4 phrases qui expliquent la note et donnent la clé pour réussir, sans jamais culpabiliser.
+- "explication" : 2 à 4 phrases qui expliquent la note et donnent la clé pour réussir, sans jamais culpabiliser. Reste sur le contenu de la copie : pas de référence locale ajoutée pour la forme (marché, ville, université nommée), le contexte béninois sert aux énoncés, pas aux corrections.
 
 Format de sortie JSON attendu :
 { "pointsObtenus": number, "explication": string, "elementsReussis": string[], "elementsManquants": string[] }`;

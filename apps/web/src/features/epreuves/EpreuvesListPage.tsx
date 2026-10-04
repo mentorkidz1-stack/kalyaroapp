@@ -19,10 +19,17 @@ interface EpreuveEtudiant {
   examen: string | null;
   etablissementSource: string | null;
   dureeMinutes: number | null;
+  dureeExamenMinutes: number;
   bareme: number;
   nbQuestions: number;
   decoupee: boolean;
-  dernierPassage: { id: string; termineAt: string; note: number | null; bareme: number | null } | null;
+  dernierPassage: {
+    id: string;
+    mode: "ENTRAINEMENT" | "EXAMEN_BLANC";
+    termineAt: string;
+    note: number | null;
+    bareme: number | null;
+  } | null;
 }
 
 const formatPoints = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
@@ -62,8 +69,10 @@ export function EpreuvesListPage() {
   const { data: streakData } = useStreak();
 
   const demarrer = useMutation({
-    mutationFn: (epreuveId: string) => api.post<{ passageId: string }>(`/api/eleve/epreuves/${epreuveId}/passages`),
-    onSuccess: (p) => navigate(`/epreuves/passages/${p.passageId}`),
+    mutationFn: ({ epreuveId, mode }: { epreuveId: string; mode: "ENTRAINEMENT" | "EXAMEN_BLANC" }) =>
+      api.post<{ passageId: string; mode: string }>(`/api/eleve/epreuves/${epreuveId}/passages`, { mode }),
+    onSuccess: (p) =>
+      navigate(p.mode === "EXAMEN_BLANC" ? `/epreuves/examen/${p.passageId}` : `/epreuves/passages/${p.passageId}`),
     onError: (err) => setErreurDemarrage(err instanceof ApiError ? err.message : "Impossible de démarrer l'épreuve."),
   });
 
@@ -118,33 +127,51 @@ export function EpreuvesListPage() {
                   <Badge variant="neutral">
                     {e.nbQuestions} question{e.nbQuestions > 1 ? "s" : ""} · sur {formatPoints(e.bareme)}
                   </Badge>
-                  {e.dureeMinutes && <Badge variant="neutral">{e.dureeMinutes} min</Badge>}
+                  <Badge variant="neutral">{e.dureeExamenMinutes} min</Badge>
                 </div>
                 <p className="text-sm text-ink-soft mb-3">
                   <MathText text={apercu(e.enonce)} />
                 </p>
                 {e.dernierPassage?.note != null && (
                   <p className="text-sm text-ink mb-3">
-                    Ta dernière note :{" "}
+                    {e.dernierPassage.mode === "EXAMEN_BLANC" ? "Dernier examen blanc" : "Dernier entraînement"} :{" "}
                     <strong>
                       {formatPoints(e.dernierPassage.note)} / {formatPoints(e.dernierPassage.bareme ?? e.bareme)}
                     </strong>
                   </p>
                 )}
-                <Button
-                  className="w-auto"
-                  disabled={demarrer.isPending}
-                  onClick={() => {
-                    setErreurDemarrage(null);
-                    demarrer.mutate(e.id);
-                  }}
-                >
-                  {demarrer.isPending && demarrer.variables === e.id
-                    ? "Préparation…"
-                    : e.dernierPassage
-                      ? "Repasser l'épreuve"
-                      : "Commencer"}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    variant="ghost"
+                    disabled={demarrer.isPending}
+                    onClick={() => {
+                      setErreurDemarrage(null);
+                      demarrer.mutate({ epreuveId: e.id, mode: "ENTRAINEMENT" });
+                    }}
+                  >
+                    {demarrer.isPending && demarrer.variables?.epreuveId === e.id && demarrer.variables.mode === "ENTRAINEMENT"
+                      ? "Préparation…"
+                      : "S'entraîner"}
+                  </Button>
+                  <Button
+                    disabled={demarrer.isPending}
+                    onClick={() => {
+                      setErreurDemarrage(null);
+                      const ok = window.confirm(
+                        `Examen blanc : ${e.dureeExamenMinutes} minutes chronométrées, sans correction ni indice avant la fin. ` +
+                          "Le chronomètre démarre dès maintenant. Commencer ?"
+                      );
+                      if (ok) demarrer.mutate({ epreuveId: e.id, mode: "EXAMEN_BLANC" });
+                    }}
+                  >
+                    {demarrer.isPending && demarrer.variables?.epreuveId === e.id && demarrer.variables.mode === "EXAMEN_BLANC"
+                      ? "Préparation…"
+                      : `Examen blanc · ${e.dureeExamenMinutes} min`}
+                  </Button>
+                </div>
+                <p className="text-xs text-ink-soft mt-2">
+                  Entraînement : correction après chaque question. Examen blanc : conditions réelles, note à la fin.
+                </p>
               </Card>
             ))}
           </div>
