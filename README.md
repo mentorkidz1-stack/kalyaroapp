@@ -62,11 +62,20 @@ Repères dans le code :
 git clone https://github.com/mentorkidz1-stack/kalyaroapp.git
 cd kalyaroapp
 npm install
+npm run preparer          # client Prisma + compilation de packages/shared et packages/ai-service
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 ```
 
 Puis compléter `apps/api/.env` (au minimum `DATABASE_URL` et `JWT_SECRET`).
+
+> `npm run preparer` est indispensable : npm 11 et plus n'exécute plus automatiquement les
+> scripts d'installation des dépendances (le client Prisma n'est donc pas généré par
+> `npm install`), et l'API importe `shared` et `ai-service` compilés. Le relancer après chaque
+> modification de `schema.prisma`, de `packages/shared` ou de `packages/ai-service`.
+>
+> Sous Windows, si le clonage échoue avec « Filename too long » :
+> `git config --global core.longpaths true`, puis recloner.
 
 ## Variables d'environnement
 
@@ -142,12 +151,8 @@ npm run dev:api     # http://localhost:4000  (santé : /health)
 npm run dev:web     # http://localhost:5173
 ```
 
-`packages/shared` et `packages/ai-service` sont consommés compilés (`dist/`) par l'API en
-production ; en développement, les compiler une fois après modification :
-
-```bash
-npm run build --workspace packages/shared && npm run build --workspace packages/ai-service
-```
+`packages/shared` et `packages/ai-service` sont consommés compilés (`dist/`) par l'API : après
+une modification de l'un d'eux, relancer `npm run preparer` puis redémarrer l'API.
 
 ## Tests
 

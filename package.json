@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "preparer": "prisma generate --schema apps/api/prisma/schema.prisma && npm run build --workspace packages/shared && npm run build --workspace packages/ai-service",
     "dev:web": "npm run dev --workspace apps/web",
     "dev:api": "npm run dev --workspace apps/api",
     "prisma:migrate": "npm run prisma:migrate --workspace apps/api",
