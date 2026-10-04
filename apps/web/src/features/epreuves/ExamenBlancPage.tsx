@@ -3,8 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, ErrorState, LoadingState, MathText } from "../../design-system";
+import { Button, Card, ClavierMaths, ErrorState, LoadingState, MathText } from "../../design-system";
 import { RapportView, formatPoints, sousTitreEpreuve, titreEpreuve, type Passage, type Rapport } from "./rapport";
+import { BoutonPhotos, ConseilsPhoto, envoyerPhotos } from "./photos";
+
+/** Pages de copie photographiables au total (même plafond que l'API). */
+const MAX_PAGES = 8;
 
 /** Enregistrement après une pause de frappe. */
 const DELAI_ENREGISTREMENT_MS = 1500;
@@ -47,9 +51,14 @@ export function ExamenBlancPage() {
   const [etat, setEtat] = useState<EtatEnregistrement>("enregistre");
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [erreurRemise, setErreurRemise] = useState<string | null>(null);
+  const [restantPhotosMs, setRestantPhotosMs] = useState<number | null>(null);
+  const [erreurPhotos, setErreurPhotos] = useState<string | null>(null);
+  const zoneReponse = useRef<HTMLTextAreaElement>(null);
 
   const textesRef = useRef<Record<string, string>>({});
   const decalageHorlogeRef = useRef(0);
+  /** Heure limite (ms, horloge serveur) : plus aucun enregistrement de brouillon après. */
+  const limiteRef = useRef<number | null>(null);
   const initialiseRef = useRef(false);
   const remiseLanceeRef = useRef(false);
   // Temps passé par question pas encore envoyé au serveur (secondes), et début du chrono local.
@@ -112,6 +121,7 @@ export function ExamenBlancPage() {
   const enregistrer = useCallback(
     async (c: string) => {
       if (!passageId) return;
+      if (limiteRef.current !== null && Date.now() + decalageHorlogeRef.current > limiteRef.current) return;
       releverTemps();
       // Secondes entières seulement : le reste (fraction de seconde) est gardé pour l'envoi
       // suivant, sinon des enregistrements rapprochés arrondis à 0 feraient perdre du temps.
@@ -149,10 +159,19 @@ export function ExamenBlancPage() {
   useEffect(() => {
     if (!enCours || !passage?.examen) return;
     const limite = new Date(passage.examen.dateLimiteAt).getTime();
+    limiteRef.current = limite;
+    const finPhotos = passage.examen.finPhotosAt ? new Date(passage.examen.finPhotosAt).getTime() : null;
     const tick = () => {
-      const restant = limite - (Date.now() + decalageHorlogeRef.current);
+      const maintenant = Date.now() + decalageHorlogeRef.current;
+      const restant = limite - maintenant;
       setRestantMs(restant);
-      if (restant <= 0) void lancerRemise();
+      // Copie papier : à l'heure limite on pose le stylo, puis on a le délai photo pour rendre.
+      if (finPhotos !== null) {
+        setRestantPhotosMs(finPhotos - maintenant);
+        if (finPhotos - maintenant <= 0) void lancerRemise();
+      } else if (restant <= 0) {
+        void lancerRemise();
+      }
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -195,6 +214,33 @@ export function ExamenBlancPage() {
     };
   }, [enCours, enregistrer, releverTemps]);
 
+  const majPassage = (maj: Partial<NonNullable<Passage["examen"]>>) =>
+    queryClient.setQueryData<Passage>(queryKey, (p) => (p && p.examen ? { ...p, examen: { ...p.examen, ...maj } } : p));
+
+  const choisirPapier = useMutation({
+    mutationFn: (actif: boolean) => api.put<Passage>(`/api/eleve/passages/${passageId}/copie-papier`, { actif }),
+    onSuccess: (p) => p.examen && majPassage({ copiePapier: p.examen.copiePapier, finPhotosAt: p.examen.finPhotosAt }),
+  });
+  const envoyerPages = useMutation({
+    mutationFn: (photos: Blob[]) =>
+      envoyerPhotos<{ transcriptions: Record<string, string>; nbPages: number; remarque: string | null }>(
+        `/api/eleve/passages/${passageId}/photos`,
+        photos
+      ),
+    onSuccess: (r) => {
+      setErreurPhotos(r.remarque);
+      majPassage({ transcriptions: r.transcriptions, nbPages: r.nbPages });
+    },
+    onError: (err) => setErreurPhotos(err instanceof ApiError ? err.message : "Les photos n'ont pas pu être envoyées. Réessaie."),
+  });
+  const effacerPages = useMutation({
+    mutationFn: () => api.delete(`/api/eleve/passages/${passageId}/photos`),
+    onSuccess: () => {
+      setErreurPhotos(null);
+      majPassage({ transcriptions: {}, nbPages: 0 });
+    },
+  });
+
   const recommencer = useMutation({
     mutationFn: () => api.post<Passage>(`/api/eleve/epreuves/${passage!.epreuve.id}/passages`, { mode: "EXAMEN_BLANC" }),
     onSuccess: (p) => {
@@ -217,7 +263,8 @@ export function ExamenBlancPage() {
 
   function rendreAvecConfirmation() {
     if (!passage) return;
-    const vides = passage.questions.filter((q) => !(textesRef.current[q.cle] ?? "").trim()).length;
+    const lues = passage.examen?.transcriptions ?? {};
+    const vides = passage.questions.filter((q) => !(textesRef.current[q.cle] ?? "").trim() && !lues[q.cle]?.trim()).length;
     const message =
       vides > 0
         ? `Il reste ${vides} question(s) sans réponse : elles compteront 0. Rendre ta copie maintenant ?`
@@ -264,13 +311,26 @@ export function ExamenBlancPage() {
   }
 
   const question = passage?.questions[index];
+  const examen = passage?.examen;
+  const papier = !!examen?.copiePapier;
+  const tempsEcoule = restantMs !== null && restantMs <= 0;
+  const phasePhotos = papier && tempsEcoule;
   const alerte = restantMs !== null && restantMs <= ALERTE_TEMPS_MS;
-  const nbRedigees = passage ? passage.questions.filter((q) => (textes[q.cle] ?? "").trim()).length : 0;
+  const lues = examen?.transcriptions ?? {};
+  const nbRedigees = passage
+    ? passage.questions.filter((q) => (textes[q.cle] ?? "").trim() || lues[q.cle]?.trim()).length
+    : 0;
 
   return (
     <div className="min-h-screen bg-bg">
       <AppHeader
-        title={restantMs !== null ? `⏱ ${formatChrono(restantMs)}` : titre}
+        title={
+          phasePhotos && restantPhotosMs !== null
+            ? `📷 ${formatChrono(restantPhotosMs)}`
+            : restantMs !== null
+              ? `⏱ ${formatChrono(restantMs)}`
+              : titre
+        }
         subtitle={passage ? `${titre} · ${sousTitreEpreuve(passage, "Examen blanc")}` : "Examen blanc"}
         variant={alerte ? "alert" : "deep"}
       />
@@ -281,6 +341,82 @@ export function ExamenBlancPage() {
 
         {passage && question && (
           <>
+            {phasePhotos && (
+              <Card className="bg-accent-tint border-accent">
+                <p className="font-display font-bold text-base text-ink mb-1">Temps écoulé : pose ton stylo ✋</p>
+                <p className="text-sm text-ink">
+                  Il te reste {restantPhotosMs !== null ? formatChrono(restantPhotosMs) : "quelques minutes"} pour photographier
+                  ta copie, puis rends-la. Elle sera rendue automatiquement à la fin de ce délai.
+                </p>
+              </Card>
+            )}
+
+            {!tempsEcoule && (
+              <label className="flex items-start gap-3 bg-surface border border-line rounded p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 w-5 h-5 accent-[var(--primary)]"
+                  checked={papier}
+                  disabled={choisirPapier.isPending}
+                  onChange={(e) => choisirPapier.mutate(e.target.checked)}
+                />
+                <span className="text-sm text-ink">
+                  <strong>✍️ Je rédige sur papier</strong>
+                  <span className="block text-ink-soft text-xs mt-0.5">
+                    Comme à l'examen : tu photographies ta copie à la fin, tu auras 10 minutes de plus pour le faire. Tu peux
+                    aussi mélanger papier et saisie au clavier.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {papier && (
+              <Card>
+                <div className="font-display font-bold text-base text-ink mb-1">📷 Ma copie papier</div>
+                <p className="text-sm text-ink-soft mb-2">
+                  {examen?.nbPages ? `${examen.nbPages} page(s) envoyée(s).` : "Aucune page envoyée pour l'instant."} Chaque
+                  page est lue tout de suite : vérifie ci-dessous ce qui a été compris.
+                </p>
+                <ConseilsPhoto />
+                <div className="mt-2 space-y-2">
+                  <BoutonPhotos
+                    libelle={`Photographier ${examen?.nbPages ? "d'autres pages" : "ma copie"} (${examen?.nbPages ?? 0}/${MAX_PAGES})`}
+                    max={Math.max(1, Math.min(6, MAX_PAGES - (examen?.nbPages ?? 0)))}
+                    enCours={envoyerPages.isPending}
+                    variant={phasePhotos ? "primary" : "ghost"}
+                    onPhotos={(photos) => envoyerPages.mutate(photos)}
+                  />
+                  {!!examen?.nbPages && (
+                    <button
+                      type="button"
+                      className="text-xs font-mono text-alert underline"
+                      disabled={effacerPages.isPending}
+                      onClick={() => {
+                        if (window.confirm("Effacer toutes les pages envoyées pour les reprendre ?")) effacerPages.mutate();
+                      }}
+                    >
+                      Recommencer les photos
+                    </button>
+                  )}
+                </div>
+                {erreurPhotos && <p className="text-sm text-alert mt-2">{erreurPhotos}</p>}
+                {Object.keys(lues).length > 0 && (
+                  <ul className="mt-3 space-y-1.5">
+                    {passage.questions.map((q) => (
+                      <li key={q.cle} className="text-xs">
+                        <span className="font-mono text-ink-soft">Q{q.numero} · </span>
+                        {lues[q.cle] ? (
+                          <span className="text-primary-deep">lue ✓</span>
+                        ) : (
+                          <span className="text-ink-soft">rien de lu pour l'instant</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )}
+
             <div className="flex items-center justify-between text-xs font-mono text-ink-soft">
               <span>
                 {nbRedigees} / {passage.questions.length} rédigée(s) · sur {formatPoints(passage.epreuve.bareme)}
@@ -328,15 +464,38 @@ export function ExamenBlancPage() {
               <div className="font-display text-[17px] leading-snug text-ink mb-4 whitespace-pre-wrap">
                 <MathText text={question.enonce} />
               </div>
+              {!tempsEcoule && (
+                <ClavierMaths
+                  zone={zoneReponse}
+                  onInsertion={(valeur) => {
+                    textesRef.current = { ...textesRef.current, [question.cle]: valeur };
+                    setTextes(textesRef.current);
+                  }}
+                />
+              )}
               <textarea
+                ref={zoneReponse}
                 value={textes[question.cle] ?? ""}
+                readOnly={tempsEcoule}
                 onChange={(e) => {
                   textesRef.current = { ...textesRef.current, [question.cle]: e.target.value };
                   setTextes(textesRef.current);
                 }}
-                placeholder="Rédige ta réponse comme sur ta copie : démarche, calculs, résultat."
-                className="w-full min-h-[220px] rounded-[14px] border-2 border-line p-3 font-sans text-sm focus:outline-none focus:border-primary"
+                placeholder={
+                  papier
+                    ? "Facultatif : tu rédiges sur papier. Tu peux compléter ici au clavier."
+                    : "Rédige ta réponse comme sur ta copie : démarche, calculs, résultat."
+                }
+                className={`w-full ${papier ? "min-h-[100px]" : "min-h-[220px]"} rounded-[14px] border-2 border-line p-3 font-sans text-sm focus:outline-none focus:border-primary read-only:bg-bg`}
               />
+              {lues[question.cle] && (
+                <div className="bg-bg rounded-[12px] p-3 mt-3">
+                  <div className="text-[11px] font-mono uppercase text-ink-soft mb-1">📷 Lu sur ta copie pour cette question</div>
+                  <div className="text-sm text-ink whitespace-pre-wrap">
+                    <MathText text={lues[question.cle]!} />
+                  </div>
+                </div>
+              )}
             </Card>
 
             <div className="flex gap-2">

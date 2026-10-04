@@ -18,3 +18,4 @@ export * from "./ErrorState";
 export * from "./MasteryCelebration";
 export * from "./MasteryBadge";
 export * from "./MathText";
+export * from "./ClavierMaths";

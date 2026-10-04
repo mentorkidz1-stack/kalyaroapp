@@ -10,6 +10,8 @@ export interface Correction {
   explication: string;
   elementsReussis: string[];
   elementsManquants: string[];
+  /** La réponse notée est la transcription d'une copie photographiée. */
+  depuisPhoto?: boolean;
 }
 
 export interface QuestionPassage {
@@ -37,7 +39,16 @@ export interface Passage {
   };
   questions: QuestionPassage[];
   reponses: Record<string, Correction & { reponseDonnee: string }>;
-  examen: { dateLimiteAt: string; dureeMinutes: number; serverNow: string; brouillons: Record<string, string> } | null;
+  examen: {
+    dateLimiteAt: string;
+    dureeMinutes: number;
+    serverNow: string;
+    brouillons: Record<string, string>;
+    copiePapier: boolean;
+    finPhotosAt: string | null;
+    nbPages: number;
+    transcriptions: Record<string, string>;
+  } | null;
 }
 
 type StatutTemps = "non_abordee" | "rapide" | "dans_le_temps" | "trop_long";
@@ -286,7 +297,9 @@ export function RapportView({
                       <MathText text={question.enonce} />
                     </div>
                     <div className="bg-bg rounded-[10px] p-2.5 text-sm text-ink whitespace-pre-wrap">
-                      <div className="text-[11px] font-mono uppercase text-ink-soft mb-1">Ta réponse</div>
+                      <div className="text-[11px] font-mono uppercase text-ink-soft mb-1">
+                        {correction.depuisPhoto ? "📷 Lu sur ta copie" : "Ta réponse"}
+                      </div>
                       <MathText text={correction.reponseDonnee} />
                     </div>
                     <CorrectionView correction={correction} />

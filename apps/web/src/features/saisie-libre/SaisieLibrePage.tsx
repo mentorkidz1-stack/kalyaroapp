@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, FeedbackBlock, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
+import { Button, Card, ClavierMaths, FeedbackBlock, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
 
 interface NextSaisieLibre {
   id: string;
@@ -18,6 +18,7 @@ export function SaisieLibrePage() {
   const { chapitreId, notionId } = useParams<{ chapitreId: string; notionId: string }>();
   const navigate = useNavigate();
   const [reponse, setReponse] = useState("");
+  const zoneReponse = useRef<HTMLTextAreaElement>(null);
   const [result, setResult] = useState<RepondreResult | null>(null);
 
   const {
@@ -87,7 +88,9 @@ export function SaisieLibrePage() {
         {question && (
           <Card>
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
+            {!result && <ClavierMaths zone={zoneReponse} onInsertion={setReponse} />}
             <textarea
+              ref={zoneReponse}
               value={reponse}
               onChange={(e) => setReponse(e.target.value)}
               disabled={!!result}

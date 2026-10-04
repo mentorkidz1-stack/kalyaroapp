@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, ChoiceButton, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
+import { Button, Card, ChoiceButton, ClavierMaths, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
+import { BoutonPhotos, ConseilsPhoto, envoyerPhotos } from "./photos";
 import { useQcmNext, useSubmitQcm } from "../qcm/useQcm";
 import {
   CorrectionView,
@@ -24,6 +25,8 @@ interface NotionRef {
 interface ResultatQuestion extends Correction {
   cle: string;
   ratee: boolean;
+  /** Ce que l'IA a lu sur la photo (réponse photographiée), sinon null. */
+  transcription: string | null;
   diagnostic: { diagnosticId: string; notionASonder: NotionRef } | null;
 }
 interface AdvanceDiagnosticResult {
@@ -57,6 +60,7 @@ export function EpreuveSessionPage() {
   const [diagnostics, setDiagnostics] = useState<Record<string, Diagnostic>>({});
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const zoneReponse = useRef<HTMLTextAreaElement>(null);
 
   // Reprise : on se place sur la première question sans réponse.
   useEffect(() => {
@@ -71,29 +75,40 @@ export function EpreuveSessionPage() {
     enabled: !!passage?.termine && !rapport,
   });
 
+  function appliquerResultat(r: ResultatQuestion, reponseDonnee: string) {
+    setSubmitError(null);
+    setReponse("");
+    if (r.diagnostic) {
+      const { diagnosticId, notionASonder } = r.diagnostic;
+      setDiagnostics((d) => ({ ...d, [r.cle]: { type: "propose", diagnosticId, notion: notionASonder } }));
+    }
+    queryClient.setQueryData<Passage>(queryKey, (p) =>
+      p ? { ...p, reponses: { ...p.reponses, [r.cle]: { ...r, reponseDonnee } } } : p
+    );
+  }
+  const signalerErreur = (err: unknown) =>
+    setSubmitError(
+      err instanceof ApiError && err.status === 502
+        ? "La correction automatique est momentanément indisponible. Ta réponse n'a pas été perdue : renvoie-la dans un instant."
+        : err instanceof ApiError
+          ? err.message
+          : "Ta réponse n'a pas pu être envoyée. Réessaie."
+    );
+
   const repondre = useMutation({
     mutationFn: (cle: string) =>
       api.post<ResultatQuestion>(`/api/eleve/passages/${passageId}/questions/${cle}/repondre`, { reponseDonnee: reponse }),
-    onSuccess: (r) => {
-      setSubmitError(null);
-      setReponse("");
-      if (r.diagnostic) {
-        const { diagnosticId, notionASonder } = r.diagnostic;
-        setDiagnostics((d) => ({ ...d, [r.cle]: { type: "propose", diagnosticId, notion: notionASonder } }));
-      }
-      queryClient.setQueryData<Passage>(queryKey, (p) =>
-        p ? { ...p, reponses: { ...p.reponses, [r.cle]: { ...r, reponseDonnee: reponse } } } : p
-      );
-    },
-    onError: (err) =>
-      setSubmitError(
-        err instanceof ApiError && err.status === 502
-          ? "La correction automatique est momentanément indisponible. Ta réponse n'a pas été perdue : renvoie-la dans un instant."
-          : err instanceof ApiError
-            ? err.message
-            : "Ta réponse n'a pas pu être envoyée. Réessaie."
-      ),
+    onSuccess: (r) => appliquerResultat(r, reponse),
+    onError: signalerErreur,
   });
+
+  const repondrePhoto = useMutation({
+    mutationFn: ({ cle, photos }: { cle: string; photos: Blob[] }) =>
+      envoyerPhotos<ResultatQuestion>(`/api/eleve/passages/${passageId}/questions/${cle}/repondre-photo`, photos),
+    onSuccess: (r) => appliquerResultat(r, r.transcription ?? ""),
+    onError: signalerErreur,
+  });
+  const envoiEnCours = repondre.isPending || repondrePhoto.isPending;
 
   const terminer = useMutation({
     mutationFn: () => api.post<Rapport>(`/api/eleve/passages/${passageId}/terminer`),
@@ -217,15 +232,27 @@ export function EpreuveSessionPage() {
 
               {!correction && (
                 <>
+                  <ClavierMaths zone={zoneReponse} onInsertion={setReponse} desactive={envoiEnCours} />
                   <textarea
+                    ref={zoneReponse}
                     value={reponse}
                     onChange={(e) => setReponse(e.target.value)}
                     placeholder="Rédige ta réponse comme sur ta copie : démarche, calculs, résultat."
                     className="w-full min-h-[160px] rounded-[14px] border-2 border-line p-3 font-sans text-sm focus:outline-none focus:border-primary mb-3"
                   />
-                  <Button onClick={() => repondre.mutate(question.cle)} disabled={!reponse.trim() || repondre.isPending}>
+                  <Button onClick={() => repondre.mutate(question.cle)} disabled={!reponse.trim() || envoiEnCours}>
                     {repondre.isPending ? "Correction en cours…" : "Valider ma réponse"}
                   </Button>
+                  <div className="mt-4 pt-3 border-t border-line space-y-2">
+                    <p className="text-sm text-ink">Tu as rédigé sur papier ? Prends ta réponse en photo :</p>
+                    <ConseilsPhoto />
+                    <BoutonPhotos
+                      libelle="📷 Répondre avec une photo de ma copie"
+                      max={3}
+                      enCours={repondrePhoto.isPending}
+                      onPhotos={(photos) => repondrePhoto.mutate({ cle: question.cle, photos })}
+                    />
+                  </div>
                   {submitError && (
                     <div className="mt-3">
                       <ErrorState message={submitError} />
@@ -234,6 +261,17 @@ export function EpreuveSessionPage() {
                 </>
               )}
 
+              {correction?.depuisPhoto && (
+                <div className="bg-bg rounded-[12px] p-3 mb-3">
+                  <div className="text-[11px] font-mono uppercase text-ink-soft mb-1">📷 Ce que nous avons lu sur ta copie</div>
+                  <div className="text-sm text-ink whitespace-pre-wrap">
+                    <MathText text={correction.reponseDonnee} />
+                  </div>
+                  <p className="text-[11px] text-ink-soft mt-1">
+                    La note porte sur cette lecture. Si elle ne correspond pas à ta copie, écris plus lisiblement la prochaine fois.
+                  </p>
+                </div>
+              )}
               {correction && <CorrectionView correction={correction} />}
             </Card>
 
