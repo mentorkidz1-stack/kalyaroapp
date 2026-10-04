@@ -2,6 +2,7 @@ import type { Difficulte, StatutQuestion } from "@prisma/client";
 import { generateQcm, generateQcmVariants, generateSaisieLibre } from "@kalyaro/ai-service";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
+import { figureIaValide, figurePourPrisma } from "../../lib/figures.js";
 
 async function assertNotionsBelongToChapitre(chapitreId: string, notionIds: string[]) {
   const notions = await prisma.notion.findMany({ where: { id: { in: notionIds }, chapitreId } });
@@ -26,7 +27,7 @@ export const listQcmAValider = () =>
     include: {
       notions: { include: { notion: true } },
       chapitre: true,
-      varianteDe: { select: { id: true, enonce: true, choix: true, bonneReponse: true } },
+      varianteDe: { select: { id: true, enonce: true, choix: true, bonneReponse: true, figure: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -40,6 +41,7 @@ export const createQcm = async (
     bonneReponse: string;
     difficulte: Difficulte;
     notionIds: string[];
+    figure?: unknown;
   }
 ) => {
   const chapitre = await prisma.chapitre.findUnique({ where: { id: chapitreId } });
@@ -53,6 +55,7 @@ export const createQcm = async (
       choix: data.choix,
       bonneReponse: data.bonneReponse,
       difficulte: data.difficulte,
+      figure: figurePourPrisma(data.figure ?? undefined),
       source: "MANUEL",
       statut: "PUBLIE",
       createdById,
@@ -71,12 +74,14 @@ export const updateQcm = async (
     difficulte?: Difficulte;
     statut?: StatutQuestion;
     notionIds?: string[];
+    figure?: unknown;
   }
 ) => {
   const existing = await prisma.questionQcm.findUnique({ where: { id } });
   if (!existing) throw new AppError("Question QCM introuvable", 404);
 
-  const { notionIds, ...rest } = data;
+  const { notionIds, figure, ...autres } = data;
+  const rest = { ...autres, ...(figure !== undefined ? { figure: figurePourPrisma(figure) } : {}) };
   return prisma.$transaction(async (tx) => {
     if (notionIds) {
       const notions = await tx.notion.findMany({
@@ -142,6 +147,7 @@ export const generateQcmForChapitre = async (
           choix: q.choix,
           bonneReponse: q.bonneReponse,
           difficulte: q.difficulte,
+          figure: figurePourPrisma(figureIaValide(q.figure)),
           source: "IA",
           statut: "A_VALIDER",
           createdById,
@@ -186,6 +192,7 @@ export const generateVariantesForQcm = async (questionId: string, createdById: s
     choixOriginal: question.choix as string[],
     bonneReponseOriginal: question.bonneReponse,
     nombreVariantes: aGenerer,
+    figureOriginale: question.figure ?? undefined,
   });
 
   const created = [];
@@ -198,6 +205,7 @@ export const generateVariantesForQcm = async (questionId: string, createdById: s
           choix: v.choix,
           bonneReponse: v.bonneReponse,
           difficulte: question.difficulte,
+          figure: figurePourPrisma(figureIaValide(v.figure)),
           source: "IA",
           statut: "A_VALIDER",
           createdById,
@@ -268,7 +276,7 @@ export const listSaisieLibreAValider = () =>
 export const createSaisieLibre = async (
   chapitreId: string,
   createdById: string,
-  data: { enonce: string; reponseReference: string; notionIds: string[] }
+  data: { enonce: string; reponseReference: string; notionIds: string[]; figure?: unknown }
 ) => {
   const chapitre = await prisma.chapitre.findUnique({ where: { id: chapitreId } });
   if (!chapitre) throw new AppError("Chapitre introuvable", 404);
@@ -279,6 +287,7 @@ export const createSaisieLibre = async (
       chapitreId,
       enonce: data.enonce,
       reponseReference: data.reponseReference,
+      figure: figurePourPrisma(data.figure ?? undefined),
       source: "MANUEL",
       statut: "PUBLIE",
       createdById,
@@ -295,12 +304,14 @@ export const updateSaisieLibre = async (
     reponseReference?: string;
     statut?: StatutQuestion;
     notionIds?: string[];
+    figure?: unknown;
   }
 ) => {
   const existing = await prisma.questionSaisieLibre.findUnique({ where: { id } });
   if (!existing) throw new AppError("Question à saisie libre introuvable", 404);
 
-  const { notionIds, ...rest } = data;
+  const { notionIds, figure, ...autres } = data;
+  const rest = { ...autres, ...(figure !== undefined ? { figure: figurePourPrisma(figure) } : {}) };
   return prisma.$transaction(async (tx) => {
     if (notionIds) {
       const notions = await tx.notion.findMany({
@@ -364,6 +375,7 @@ export const generateSaisieLibreForChapitre = async (
           chapitreId,
           enonce: q.enonce,
           reponseReference: q.reponseReference,
+          figure: figurePourPrisma(figureIaValide(q.figure)),
           source: "IA",
           statut: "A_VALIDER",
           createdById,

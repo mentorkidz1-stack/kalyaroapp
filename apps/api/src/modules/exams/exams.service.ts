@@ -3,6 +3,7 @@ import { generateAnswerKey, proposeExamSplit } from "@kalyaro/ai-service";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
 import { extractPdfText } from "../../lib/pdf-upload.js";
+import { figureIaValide, figurePourPrisma } from "../../lib/figures.js";
 
 async function extractPdfTextOrThrow(buffer: Buffer): Promise<string> {
   let text: string;
@@ -198,7 +199,7 @@ export const listQuestionsEpreuve = async (epreuveId: string) => {
  */
 export const remplacerQuestionsEpreuve = async (
   epreuveId: string,
-  questions: { id?: string; numero: string; enonce: string; points: number; notionId?: string | null }[]
+  questions: { id?: string; numero: string; enonce: string; points: number; notionId?: string | null; figure?: unknown }[]
 ) => {
   const epreuve = await epreuveOuErreur(epreuveId);
 
@@ -221,7 +222,15 @@ export const remplacerQuestionsEpreuve = async (
   await prisma.$transaction(async (tx) => {
     await tx.questionEpreuve.deleteMany({ where: { epreuveId, id: { notIn: idsConserves } } });
     for (const [ordre, q] of questions.entries()) {
-      const data = { numero: q.numero, enonce: q.enonce, points: q.points, notionId: q.notionId ?? null, ordre };
+      // figure absente = inchangée ; null = supprimée.
+      const data = {
+        numero: q.numero,
+        enonce: q.enonce,
+        points: q.points,
+        notionId: q.notionId ?? null,
+        ordre,
+        ...(q.figure !== undefined ? { figure: figurePourPrisma(q.figure) } : {}),
+      };
       if (q.id) await tx.questionEpreuve.update({ where: { id: q.id }, data });
       else await tx.questionEpreuve.create({ data: { ...data, epreuveId } });
     }
@@ -248,7 +257,13 @@ export const proposerDecoupage = async (epreuveId: string, bareme?: number) => {
   const parNom = new Map(notions.map((n) => [normaliser(n.nom), n]));
   const proposees = questions.map((q) => {
     const notion = q.notion ? parNom.get(normaliser(q.notion)) : undefined;
-    return { numero: q.numero, enonce: q.enonce, points: q.points, notionId: notion?.id ?? null };
+    return {
+      numero: q.numero,
+      enonce: q.enonce,
+      points: q.points,
+      notionId: notion?.id ?? null,
+      figure: figureIaValide(q.figure) ?? null,
+    };
   });
   const total = proposees.reduce((s, q) => s + q.points, 0);
   return {

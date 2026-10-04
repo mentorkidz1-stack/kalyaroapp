@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Button, Card, FeedbackBlock, MathText } from "../../design-system";
+import { Button, Card, FeedbackBlock, MathText, FigureRenderer } from "../../design-system";
 
 // Types et vues partagés par l'entraînement (EpreuveSessionPage) et l'examen blanc
 // (ExamenBlancPage) : correction d'une question et rapport final.
@@ -21,6 +21,8 @@ export interface QuestionPassage {
   points: number;
   notionNom: string | null;
   imageUrls: string[];
+  /** Figure dessinée par l'application (description JSON validée). */
+  figure?: unknown;
 }
 
 export interface Passage {
@@ -296,6 +298,7 @@ export function RapportView({
                     <div className="text-sm text-ink whitespace-pre-wrap">
                       <MathText text={question.enonce} />
                     </div>
+                    {question.figure != null && <FigureRenderer figure={question.figure} />}
                     <div className="bg-bg rounded-[10px] p-2.5 text-sm text-ink whitespace-pre-wrap">
                       <div className="text-[11px] font-mono uppercase text-ink-soft mb-1">
                         {correction.depuisPhoto ? "📷 Lu sur ta copie" : "Ta réponse"}

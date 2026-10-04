@@ -1,4 +1,5 @@
 import { BASE_SYSTEM_INSTRUCTIONS } from "./shared.js";
+import { CONSIGNE_FIGURES } from "./figures.js";
 import type { GenerateSaisieLibreInput } from "../schemas/generate-saisie-libre.js";
 
 export function buildGenerateSaisieLibrePrompt(input: GenerateSaisieLibreInput) {
@@ -7,7 +8,9 @@ export function buildGenerateSaisieLibrePrompt(input: GenerateSaisieLibreInput) 
 Tu génères des questions à réponse libre (l'élève rédige sa réponse en texte, pas de choix proposés) à partir d'un extrait de cours, pour tester la compréhension d'une notion précise à la fois — jamais plusieurs notions mélangées dans une même question. Ce sont des questions d'explication ou de justification ("Explique pourquoi...", "Dans tes mots..."), pas de simples questions à réponse courte factuelle. Chaque question doit taguer la notion principale qu'elle teste : réutilise un nom de la liste "notions déjà identifiées" si la question correspond exactement, sinon propose un nom de notion court et clair (2-5 mots). La "reponseReference" doit être une réponse modèle complète, servant de base de comparaison sémantique à la correction (pas juste un mot-clé).
 
 Format de sortie JSON attendu :
-{ "questions": [ { "enonce": string, "reponseReference": string, "notionTag": string } ] }`;
+{ "questions": [ { "enonce": string, "reponseReference": string, "notionTag": string, "figure": object | null } ] }
+
+${CONSIGNE_FIGURES}`;
 
   const prompt = `Chapitre : ${input.chapitreTitre}
 Notions déjà identifiées pour ce chapitre : ${

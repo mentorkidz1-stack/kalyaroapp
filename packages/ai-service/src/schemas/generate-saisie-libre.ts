@@ -14,6 +14,8 @@ export const generateSaisieLibreOutputSchema = z.object({
       enonce: z.string(),
       reponseReference: z.string(),
       notionTag: z.string(),
+  /** Description de figure (validée ensuite par le serveur ; écartée si invalide). */
+  figure: z.unknown().nullable().optional(),
     })
   ),
 });

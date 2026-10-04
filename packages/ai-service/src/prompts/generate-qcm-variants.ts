@@ -1,4 +1,5 @@
 import { BASE_SYSTEM_INSTRUCTIONS } from "./shared.js";
+import { CONSIGNE_FIGURES } from "./figures.js";
 import type { GenerateQcmVariantsInput } from "../schemas/generate-qcm-variants.js";
 
 export function buildGenerateQcmVariantsPrompt(input: GenerateQcmVariantsInput) {
@@ -15,14 +16,18 @@ Pour chaque variante :
 - les variantes doivent être différentes entre elles.
 
 Format de sortie JSON attendu :
-{ "variantes": [ { "enonce": string, "choix": string[] (exactement 4), "bonneReponse": string } ] }`;
+{ "variantes": [ { "enonce": string, "choix": string[] (exactement 4), "bonneReponse": string, "figure": object | null } ] }
+
+Si la question d'origine a une figure, chaque variante en a une, RECALCULÉE avec ses nouvelles valeurs (coordonnées, longueurs, valeurs du tableau…), dans le même format.
+
+${CONSIGNE_FIGURES}`;
 
   const prompt = `Notion testée : ${input.notionNom}
 
 Question d'origine : ${input.enonceOriginal}
 Choix d'origine : ${input.choixOriginal.join(" / ")}
 Bonne réponse d'origine : ${input.bonneReponseOriginal}
-
+${input.figureOriginale ? `Figure d'origine : ${JSON.stringify(input.figureOriginale)}\n` : ""}
 Génère ${input.nombreVariantes} variante(s) de cette question.`;
 
   return { system, prompt };

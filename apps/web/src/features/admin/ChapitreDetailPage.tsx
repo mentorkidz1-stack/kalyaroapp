@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
-import { Card, Button, Badge, FormField, fieldInputClass, Spinner, Table, Th, Td, MathText } from "../../design-system";
+import { Card, Button, Badge, FormField, fieldInputClass, Spinner, Table, Th, Td, MathText, FigureRenderer } from "../../design-system";
+import { EditeurFigure } from "./EditeurFigure";
 
 interface Notion {
   id: string;
@@ -27,6 +28,8 @@ interface QuestionQcm {
   notions: { notion: Notion }[];
   varianteDeId: string | null;
   _count: { variantes: number };
+  /** Figure dessinée par l'application (description JSON validée). */
+  figure?: unknown;
 }
 interface ResultatVariantesLot {
   questionsTraitees: number;
@@ -41,6 +44,7 @@ interface QuestionSaisieLibre {
   source: "IA" | "MANUEL";
   statut: "BROUILLON" | "A_VALIDER" | "PUBLIE";
   notions: { notion: Notion }[];
+  figure?: unknown;
 }
 
 export function ChapitreDetailPage() {
@@ -345,6 +349,8 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
   const [choix, setChoix] = useState(["", "", "", ""]);
   const [bonneReponse, setBonneReponse] = useState("");
   const [notionIds, setNotionIds] = useState<string[]>([]);
+  const [figure, setFigure] = useState<unknown | null>(null);
+  const [figureValide, setFigureValide] = useState(true);
   const [nombreIa, setNombreIa] = useState(5);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -359,6 +365,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
         bonneReponse,
         difficulte: "MOYEN",
         notionIds,
+        ...(figure != null ? { figure } : {}),
       }),
     onSuccess: () => {
       setError(null);
@@ -366,6 +373,8 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
       setChoix(["", "", "", ""]);
       setBonneReponse("");
       setNotionIds([]);
+      setFigure(null);
+      setFigureValide(true);
       invalidate();
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
@@ -466,6 +475,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
               ))}
             </div>
             <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
+            {q.figure != null && <FigureRenderer figure={q.figure} afficherErreurs />}
             <ul className="text-xs text-ink-soft mb-2 list-disc list-inside">
               {q.choix.map((c) => (
                 <li key={c} className={c === q.bonneReponse ? "text-primary-deep font-bold" : ""}>
@@ -545,11 +555,18 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
             ))}
           </select>
         </FormField>
+        <EditeurFigure
+          valeur={figure}
+          onChange={(f, valide) => {
+            setFigure(f);
+            setFigureValide(valide);
+          }}
+        />
         <Button
           type="button"
           className="w-auto"
           onClick={() => create.mutate()}
-          disabled={!enonce.trim() || !bonneReponse.trim() || notionIds.length === 0}
+          disabled={!enonce.trim() || !bonneReponse.trim() || notionIds.length === 0 || !figureValide}
         >
           Créer le QCM
         </Button>
@@ -632,6 +649,7 @@ function SaisieLibreSection({ chapitreId }: { chapitreId: string }) {
               <Badge variant={q.statut === "PUBLIE" ? "ok" : "warn"}>{q.statut}</Badge>
             </div>
             <p className="text-sm font-semibold text-ink mb-1"><MathText text={q.enonce} /></p>
+            {q.figure != null && <FigureRenderer figure={q.figure} afficherErreurs />}
             <p className="text-xs text-ink-soft mb-2">Référence : <MathText text={q.reponseReference} /></p>
             <div className="flex gap-3">
               {q.statut !== "PUBLIE" && (

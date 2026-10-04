@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { Badge, Button, MathText, Spinner, fieldInputClass } from "../../design-system";
+import { EditeurFigure } from "./EditeurFigure";
 
 interface NotionRef {
   id: string;
@@ -19,6 +20,7 @@ interface QuestionEpreuve {
   enonce: string;
   points: number;
   notionId: string | null;
+  figure?: unknown;
   corriges: CorrigeQuestion[];
 }
 interface QuestionsResponse {
@@ -26,7 +28,7 @@ interface QuestionsResponse {
   notionsDisponibles: NotionRef[];
 }
 interface Proposition {
-  questions: { numero: string; enonce: string; points: number; notionId: string | null }[];
+  questions: { numero: string; enonce: string; points: number; notionId: string | null; figure?: unknown }[];
   totalPoints: number;
   avertissement: string | null;
 }
@@ -38,17 +40,29 @@ interface Brouillon {
   enonce: string;
   points: string;
   notionId: string;
+  figure: unknown | null;
+  /** false si la figure saisie ne passe pas le schéma : l'enregistrement est bloqué. */
+  figureValide: boolean;
 }
 
 let compteur = 0;
 const nouvelleCle = () => `local-${++compteur}`;
-const versBrouillon = (q: { id?: string; numero: string; enonce: string; points: number; notionId: string | null }): Brouillon => ({
+const versBrouillon = (q: {
+  id?: string;
+  numero: string;
+  enonce: string;
+  points: number;
+  notionId: string | null;
+  figure?: unknown;
+}): Brouillon => ({
   cle: q.id ?? nouvelleCle(),
   id: q.id,
   numero: q.numero,
   enonce: q.enonce,
   points: String(q.points),
   notionId: q.notionId ?? "",
+  figure: q.figure ?? null,
+  figureValide: true,
 });
 const messageErreur = (err: unknown) => (err instanceof ApiError ? err.message : "Erreur");
 
@@ -97,6 +111,7 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
           enonce: q.enonce.trim(),
           points: Number(q.points.replace(",", ".")),
           notionId: q.notionId || null,
+          figure: q.figure,
         })),
       }),
     onSuccess: (r) => {
@@ -109,7 +124,11 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
     onError: (err) => setError(messageErreur(err)),
   });
 
-  function maj(cle: string, champ: keyof Brouillon, valeur: string) {
+  function majFigure(cle: string, figure: unknown | null, valide: boolean) {
+    setBrouillon((b) => b.map((q) => (q.cle === cle ? { ...q, figure, figureValide: valide } : q)));
+    setModifie(true);
+  }
+  function maj(cle: string, champ: "numero" | "enonce" | "points" | "notionId", valeur: string) {
     setBrouillon((b) => b.map((q) => (q.cle === cle ? { ...q, [champ]: valeur } : q)));
     setModifie(true);
   }
@@ -128,12 +147,14 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
     setModifie(true);
   }
   function ajouter() {
-    setBrouillon((b) => [...b, { cle: nouvelleCle(), numero: String(b.length + 1), enonce: "", points: "1", notionId: "" }]);
+    setBrouillon((b) => [...b, { cle: nouvelleCle(), numero: String(b.length + 1), enonce: "", points: "1", notionId: "", figure: null, figureValide: true }]);
     setModifie(true);
   }
 
   const total = brouillon.reduce((s, q) => s + (Number(q.points.replace(",", ".")) || 0), 0);
-  const invalide = brouillon.some((q) => !q.numero.trim() || !q.enonce.trim() || !(Number(q.points.replace(",", ".")) > 0));
+  const invalide = brouillon.some(
+    (q) => !q.numero.trim() || !q.enonce.trim() || !(Number(q.points.replace(",", ".")) > 0) || !q.figureValide
+  );
 
   if (isLoading) return <Spinner />;
 
@@ -217,6 +238,7 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
             onChange={(e) => maj(q.cle, "enonce", e.target.value)}
             placeholder="Consigne de la question"
           />
+          <EditeurFigure valeur={q.figure} onChange={(figure, valide) => majFigure(q.cle, figure, valide)} />
           {!modifie && q.id && <CorrigesQuestion questionId={q.id} corriges={data?.questions.find((x) => x.id === q.id)?.corriges ?? []} epreuveId={epreuveId} />}
         </div>
       ))}

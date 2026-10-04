@@ -16,6 +16,8 @@ export const generateQcmOutputSchema = z.object({
       bonneReponse: z.string(),
       notionTag: z.string(),
       difficulte: z.enum(["FACILE", "MOYEN", "DIFFICILE"]),
+  /** Description de figure (validée ensuite par le serveur ; écartée si invalide). */
+  figure: z.unknown().nullable().optional(),
     })
   ),
 });

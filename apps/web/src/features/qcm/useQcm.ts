@@ -9,6 +9,8 @@ export interface NextQcm {
   attemptToken: string;
   /** Variante validée de la question ratée juste avant. */
   estVariante: boolean;
+  /** Figure dessinée par l'application (description JSON validée). */
+  figure?: unknown;
 }
 export interface FicheResume {
   id: string;

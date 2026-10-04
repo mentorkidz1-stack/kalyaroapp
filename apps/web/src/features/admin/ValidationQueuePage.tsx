@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { Card, Button, Badge, Spinner, MathText } from "../../design-system";
+import { Card, Button, Badge, Spinner, MathText, FigureRenderer } from "../../design-system";
 
 interface QcmAValider {
   id: string;
@@ -9,11 +9,13 @@ interface QcmAValider {
   bonneReponse: string;
   notions: { notion: { nom: string } }[];
   chapitre: { titre: string };
-  varianteDe: { id: string; enonce: string; choix: string[]; bonneReponse: string } | null;
+  figure?: unknown;
+  varianteDe: { id: string; enonce: string; choix: string[]; bonneReponse: string; figure?: unknown } | null;
 }
 interface SaisieLibreAValider {
   id: string;
   enonce: string;
+  figure?: unknown;
   notions: { notion: { nom: string } }[];
   chapitre: { titre: string };
 }
@@ -109,11 +111,13 @@ function QcmQueue() {
             <span className="text-[11px] text-ink-soft">· {q.chapitre.titre}</span>
           </div>
           <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
+          {q.figure != null && <FigureRenderer figure={q.figure} afficherErreurs />}
           <ChoixAvecCorrige choix={q.choix} bonneReponse={q.bonneReponse} />
           {q.varianteDe && (
             <div className="bg-bg rounded-[12px] p-2.5 mb-2">
               <div className="text-[11px] font-mono text-ink-soft mb-1">QUESTION D'ORIGINE (déjà publiée)</div>
               <p className="text-xs text-ink mb-1"><MathText text={q.varianteDe.enonce} /></p>
+              {q.varianteDe.figure != null && <FigureRenderer figure={q.varianteDe.figure} afficherErreurs />}
               <ChoixAvecCorrige choix={q.varianteDe.choix} bonneReponse={q.varianteDe.bonneReponse} />
             </div>
           )}
@@ -177,6 +181,7 @@ function SaisieLibreQueue() {
             ))}
           </div>
           <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
+          {q.figure != null && <FigureRenderer figure={q.figure} afficherErreurs />}
           <Button type="button" variant="ghost" className="w-auto" onClick={() => publier.mutate(q.id)}>
             Publier
           </Button>

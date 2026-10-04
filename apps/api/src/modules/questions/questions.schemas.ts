@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { figureOptionnelleSchema } from "@kalyaro/shared";
 
 export const idParamSchema = z.object({ id: z.string().cuid() });
 export const chapitreIdParamSchema = z.object({ chapitreId: z.string().cuid() });
@@ -13,6 +14,7 @@ export const createQcmSchema = z
     bonneReponse: z.string().min(1),
     difficulte: difficulteEnum.default("MOYEN"),
     notionIds: z.array(z.string().cuid()).min(1),
+    figure: figureOptionnelleSchema,
   })
   .refine((data) => data.choix.includes(data.bonneReponse), {
     message: "bonneReponse doit être l'un des choix",
@@ -26,6 +28,7 @@ export const updateQcmSchema = z.object({
   difficulte: difficulteEnum.optional(),
   statut: statutEnum.optional(),
   notionIds: z.array(z.string().cuid()).optional(),
+  figure: figureOptionnelleSchema,
 });
 
 export const generateQcmIaSchema = z.object({
@@ -40,6 +43,7 @@ export const createSaisieLibreSchema = z.object({
   enonce: z.string().min(1),
   reponseReference: z.string().min(1),
   notionIds: z.array(z.string().cuid()).min(1),
+  figure: figureOptionnelleSchema,
 });
 
 export const updateSaisieLibreSchema = z.object({
@@ -47,6 +51,7 @@ export const updateSaisieLibreSchema = z.object({
   reponseReference: z.string().min(1).optional(),
   statut: statutEnum.optional(),
   notionIds: z.array(z.string().cuid()).optional(),
+  figure: figureOptionnelleSchema,
 });
 
 export const generateSaisieLibreIaSchema = z.object({

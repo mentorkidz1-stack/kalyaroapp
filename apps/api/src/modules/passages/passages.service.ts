@@ -76,6 +76,7 @@ interface QuestionNotable {
   notionId: string | null;
   notionNom: string | null;
   imageUrls: string[];
+  figure: unknown;
   corrigesValides: string[];
 }
 
@@ -117,6 +118,7 @@ function questionsNotables(epreuve: EpreuveComplete): QuestionNotable[] {
       notionId: q.notionId,
       notionNom: q.notion?.nom ?? null,
       imageUrls: q.imageUrls,
+      figure: q.figure ?? null,
       corrigesValides: corrigesValides(q.corriges),
     }));
   }
@@ -130,6 +132,7 @@ function questionsNotables(epreuve: EpreuveComplete): QuestionNotable[] {
       notionId: epreuve.notionPrincipaleId,
       notionNom: epreuve.notionPrincipale?.nom ?? null,
       imageUrls: [],
+      figure: null,
       corrigesValides: corrigesValides(epreuve.corriges),
     },
   ];
@@ -293,6 +296,7 @@ function vuePassage({ passage, epreuve, questions }: PassageCharge) {
       points: q.points,
       notionNom: q.notionNom,
       imageUrls: q.imageUrls,
+      figure: q.figure,
     })),
     // En examen blanc, aucune correction n'est visible avant la fin (il n'en existe d'ailleurs pas).
     reponses: examen && !termine ? {} : reponses,

@@ -6,6 +6,8 @@ export const generateQcmVariantsInputSchema = z.object({
   choixOriginal: z.array(z.string()),
   bonneReponseOriginal: z.string(),
   nombreVariantes: z.number().int().min(1).max(10),
+  /** Figure de la question d'origine, à recalculer pour chaque variante. */
+  figureOriginale: z.unknown().optional(),
 });
 export type GenerateQcmVariantsInput = z.infer<typeof generateQcmVariantsInputSchema>;
 
@@ -17,6 +19,8 @@ const varianteSchema = z
     enonce: z.string().min(1),
     choix: z.array(z.string().min(1)).length(4),
     bonneReponse: z.string().min(1),
+  /** Description de figure (validée ensuite par le serveur ; écartée si invalide). */
+  figure: z.unknown().nullable().optional(),
   })
   .refine((v) => v.choix.includes(v.bonneReponse), {
     message: "bonneReponse doit être exactement l'un des 4 choix",

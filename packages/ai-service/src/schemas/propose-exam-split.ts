@@ -19,6 +19,8 @@ export const proposeExamSplitOutputSchema = z.object({
         points: z.number().positive(),
         /** Nom EXACT d'une notion fournie, ou null si aucune ne correspond. */
         notion: z.string().nullable(),
+        /** Description de figure (validée ensuite par le serveur ; écartée si invalide). */
+        figure: z.unknown().nullable().optional(),
       })
     )
     .min(1),

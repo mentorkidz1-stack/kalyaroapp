@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { figureOptionnelleSchema } from "@kalyaro/shared";
 
 export const idParamSchema = z.object({ id: z.string().cuid() });
 export const matiereIdParamSchema = z.object({ matiereId: z.string().cuid() });
@@ -60,6 +61,7 @@ export const remplacerQuestionsSchema = z.object({
         enonce: z.string().trim().min(1),
         points: z.number().positive().max(1000),
         notionId: z.string().cuid().nullable().optional(),
+        figure: figureOptionnelleSchema,
       })
     )
     .max(100),

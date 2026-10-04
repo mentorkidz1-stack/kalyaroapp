@@ -328,6 +328,8 @@ model QuestionQcm {
   enonce       String
   choix        Json
   bonneReponse String         @map("bonne_reponse")
+  /// Figure structurée dessinée par l'application (voir packages/shared/src/figures).
+  figure       Json?
   source       SourceQuestion
   statut       StatutQuestion @default(BROUILLON)
   difficulte   Difficulte     @default(MOYEN)
@@ -366,6 +368,8 @@ model QuestionSaisieLibre {
   chapitre         Chapitre       @relation(fields: [chapitreId], references: [id], onDelete: Cascade)
   enonce           String
   reponseReference String         @map("reponse_reference")
+  /// Figure structurée dessinée par l'application (voir packages/shared/src/figures).
+  figure           Json?
   source           SourceQuestion
   statut           StatutQuestion @default(BROUILLON)
   createdById      String         @map("created_by")

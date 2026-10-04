@@ -15,6 +15,7 @@ import {
   niveauAMonte,
   type NiveauMaitrise,
   MathText,
+  FigureRenderer,
 } from "../../design-system";
 import { useQcmNext, useSubmitQcm, useTentativeIndice, type RepondreResult } from "./useQcm";
 
@@ -163,6 +164,7 @@ export function QcmSessionPage() {
         {question && (
           <Card className={`transition-opacity duration-150 ${isTransitioning ? "opacity-0" : "opacity-100"}`}>
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
+            {question.figure != null && <FigureRenderer figure={question.figure} />}
             {question.choix.map((choix) => {
               const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
               return (

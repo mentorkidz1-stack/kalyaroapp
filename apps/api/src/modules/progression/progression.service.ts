@@ -141,7 +141,13 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
     enonce: chosen.enonce,
     choix,
   });
-  return { enonce: chosen.enonce, choix, attemptToken, estVariante: selection.motif === "variante" };
+  return {
+    enonce: chosen.enonce,
+    choix,
+    attemptToken,
+    estVariante: selection.motif === "variante",
+    figure: chosen.figure ?? null,
+  };
 };
 
 async function generateFicheResumeIfNeeded(notionId: string) {
@@ -336,7 +342,7 @@ export const getNextSaisieLibre = async (eleveId: string, notionId: string) => {
     throw new AppError("Aucune question à saisie libre publiée pour cette notion", 404);
   }
   const chosen = pool[Math.floor(Math.random() * pool.length)]!;
-  return { id: chosen.id, enonce: chosen.enonce };
+  return { id: chosen.id, enonce: chosen.enonce, figure: chosen.figure ?? null };
 };
 
 export const submitFreeAnswer = async (

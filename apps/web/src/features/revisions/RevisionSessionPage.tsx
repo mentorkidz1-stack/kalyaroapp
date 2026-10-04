@@ -15,6 +15,7 @@ import {
   MasteryCelebration,
   niveauAMonte,
   MathText,
+  FigureRenderer,
 } from "../../design-system";
 import { useSubmitQcm, useTentativeIndice, type NextQcm, type RepondreResult } from "../qcm/useQcm";
 import { REVISIONS_DUES_KEY, type RevisionsDues } from "./useRevisions";
@@ -156,6 +157,7 @@ export function RevisionSessionPage() {
         {question && !enChargement && (
           <Card>
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
+            {question.figure != null && <FigureRenderer figure={question.figure} />}
             {question.choix.map((choix) => {
               const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
               return (

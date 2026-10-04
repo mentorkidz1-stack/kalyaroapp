@@ -3,11 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, ClavierMaths, FeedbackBlock, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
+import { Button, Card, ClavierMaths, FeedbackBlock, LoadingState, EmptyState, ErrorState, MathText, FigureRenderer } from "../../design-system";
 
 interface NextSaisieLibre {
   id: string;
   enonce: string;
+  figure?: unknown;
 }
 interface RepondreResult {
   valide: boolean;
@@ -88,6 +89,7 @@ export function SaisieLibrePage() {
         {question && (
           <Card>
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
+            {question.figure != null && <FigureRenderer figure={question.figure} />}
             {!result && <ClavierMaths zone={zoneReponse} onInsertion={setReponse} />}
             <textarea
               ref={zoneReponse}

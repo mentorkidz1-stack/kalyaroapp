@@ -14,8 +14,9 @@ export const COULEURS = {
 /** Couleurs successives des courbes/droites d'un même repère. */
 export const PALETTE = ["var(--primary)", "var(--alert)", "#2f6fb0", "#8A5A0E", "#7b4bb3"];
 
-/** Largeur logique de toutes les figures (le SVG s'adapte ensuite à l'écran). */
-export const LARGEUR = 400;
+/** Largeur logique des figures, proche de la largeur réelle sur téléphone : les textes y
+ * gardent à peu près leur taille nominale (le SVG s'adapte ensuite à l'écran). */
+export const LARGEUR = 340;
 export const POLICE = "Manrope, system-ui, sans-serif";
 
 /** Pas « rond » (1, 2 ou 5 × 10^k) donnant environ `cible` graduations sur l'étendue. */
