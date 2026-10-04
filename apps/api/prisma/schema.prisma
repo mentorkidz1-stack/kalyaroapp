@@ -74,10 +74,15 @@ enum TypeCibleTentative {
   EPREUVE
 }
 
+/// Maîtrise durable (voir apps/api/src/modules/progression/mastery.ts) :
+/// FRAGILE → ACQUIS_DU_JOUR (3 réussites le même jour) → CONSOLIDE (révision réussie
+/// à ≥ 1 jour) → DURABLE (révision réussie à ≥ 7 jours).
 enum StatutMaitriseNotion {
   NON_VU
   FRAGILE
-  MAITRISE
+  ACQUIS_DU_JOUR
+  CONSOLIDE
+  DURABLE
 }
 
 enum StatutChapitre {
@@ -484,6 +489,9 @@ model ProgressionNotion {
   intervalleRevisionJours Int                   @default(1) @map("intervalle_revision_jours")
   derniereRevisionAt      DateTime?             @map("derniere_revision_at")
   prochaineRevisionAt     DateTime?             @map("prochaine_revision_at")
+  /// Dernière réponse, juste ou fausse : sert à savoir si une série de réussites a lieu
+  /// dans la même journée (heure du Bénin).
+  derniereTentativeAt     DateTime?             @map("derniere_tentative_at")
 
   @@unique([eleveId, notionId])
   @@map("progressions_notion")

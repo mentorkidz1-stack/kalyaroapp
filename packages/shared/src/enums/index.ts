@@ -78,7 +78,9 @@ export type TypeCibleTentative = (typeof TypeCibleTentative)[keyof typeof TypeCi
 export const StatutMaitriseNotion = {
   NON_VU: "NON_VU",
   FRAGILE: "FRAGILE",
-  MAITRISE: "MAITRISE",
+  ACQUIS_DU_JOUR: "ACQUIS_DU_JOUR",
+  CONSOLIDE: "CONSOLIDE",
+  DURABLE: "DURABLE",
 } as const;
 export type StatutMaitriseNotion = (typeof StatutMaitriseNotion)[keyof typeof StatutMaitriseNotion];
 

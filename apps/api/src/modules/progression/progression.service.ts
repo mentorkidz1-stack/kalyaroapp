@@ -14,11 +14,9 @@ import { assertMatiereAccessible, getAccessibleMatiereIds } from "../../lib/mati
 import { recordDailyActivity, projectCurrentStreak } from "../../lib/streak.js";
 import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload } from "./attempt-token.js";
 import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
+import { computeNextProgression, estAcquise } from "./mastery.js";
 
-const MASTERY_THRESHOLD = 3;
 const FICHE_RESUME_FAILURE_THRESHOLD = 3;
-const REVISION_INITIAL_INTERVAL_DAYS = 1;
-const REVISION_MAX_INTERVAL_DAYS = 30;
 const METACOGNITIVE_EVERY_N_ATTEMPTS = 3;
 /** Fenêtre utilisée pour compter les erreurs « récentes » lors du tri des révisions. */
 const ECHECS_RECENTS_JOURS = 30;
@@ -83,9 +81,7 @@ export const getParcoursChapitre = async (eleveId: string, chapitreId: string) =
   return chapitre.notions.map((notion) => {
     const progression = progressionByNotion.get(notion.id);
     const prerequisIds = prerequisByNotion.get(notion.id) ?? [];
-    const verrouille = prerequisIds.some(
-      (id) => (progressionByNotion.get(id)?.statut ?? "NON_VU") !== "MAITRISE"
-    );
+    const verrouille = prerequisIds.some((id) => !estAcquise(progressionByNotion.get(id)?.statut));
     return {
       notionId: notion.id,
       nom: notion.nom,
@@ -224,7 +220,7 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
 
   // Anti-rejeu : un attemptToken valide capturé (devtools) ne doit pouvoir compter qu'une
   // seule fois, sinon rejouer un token après une bonne réponse permettrait d'incrémenter
-  // artificiellement nbSuccesConsecutifs jusqu'à MAITRISE sans répondre à de vraies
+  // artificiellement nbSuccesConsecutifs jusqu'à ACQUIS_DU_JOUR sans répondre à de vraies
   // questions distinctes. L'insertion échoue sur la contrainte de clé primaire (jti) si
   // le jeton a déjà été consommé — atomique, pas de fenêtre de course possible.
   try {
@@ -258,60 +254,25 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
 
   const progression = await prisma.progressionNotion.upsert({
     where: { eleveId_notionId: { eleveId, notionId: payload.notionId } },
-    create: { eleveId, notionId: payload.notionId, statut: "FRAGILE" },
+    create: { eleveId, notionId: payload.notionId, statut: "NON_VU" },
     update: {},
   });
 
-  const now = new Date();
-  let statut = progression.statut;
-  let nbEchecs = progression.nbEchecsConsecutifs;
-  let nbSucces = progression.nbSuccesConsecutifs;
-  let intervalleRevisionJours = progression.intervalleRevisionJours;
-  let derniereRevisionAt = progression.derniereRevisionAt;
-  let prochaineRevisionAt = progression.prochaineRevisionAt;
-
-  if (correcte) {
-    nbEchecs = 0;
-    if (statut === "MAITRISE") {
-      // Révision réussie : on espace davantage la prochaine occurrence (plafonnée).
-      intervalleRevisionJours = Math.min(intervalleRevisionJours * 2, REVISION_MAX_INTERVAL_DAYS);
-      derniereRevisionAt = now;
-      prochaineRevisionAt = prochaineRevisionDans(now, intervalleRevisionJours);
-      nbSucces += 1;
-    } else {
-      nbSucces += 1;
-      if (nbSucces >= MASTERY_THRESHOLD) {
-        statut = "MAITRISE";
-        intervalleRevisionJours = REVISION_INITIAL_INTERVAL_DAYS;
-        derniereRevisionAt = now;
-        prochaineRevisionAt = prochaineRevisionDans(now, intervalleRevisionJours);
-      } else {
-        // Notion pas encore maîtrisée : elle revient dans les révisions dès demain.
-        statut = "FRAGILE";
-        prochaineRevisionAt = prochaineRevisionDans(now, REVISION_INITIAL_INTERVAL_DAYS);
-      }
-    }
-  } else {
-    nbSucces = 0;
-    nbEchecs += 1;
-    if (statut === "MAITRISE") {
-      // Seul cas de régression : un échec de révision ramène la notion en fragile.
-      intervalleRevisionJours = REVISION_INITIAL_INTERVAL_DAYS;
-    }
-    // Toute notion ratée revient dans les révisions dès demain.
-    statut = "FRAGILE";
-    prochaineRevisionAt = prochaineRevisionDans(now, REVISION_INITIAL_INTERVAL_DAYS);
-  }
+  const statutPrecedent = progression.statut;
+  const suivant = computeNextProgression(progression, { correcte, now: new Date() });
+  const statut = suivant.statut;
+  const nbEchecs = suivant.nbEchecsConsecutifs;
 
   await prisma.progressionNotion.update({
     where: { eleveId_notionId: { eleveId, notionId: payload.notionId } },
     data: {
       statut,
-      nbEchecsConsecutifs: nbEchecs,
-      nbSuccesConsecutifs: nbSucces,
-      intervalleRevisionJours,
-      derniereRevisionAt,
-      prochaineRevisionAt,
+      nbEchecsConsecutifs: suivant.nbEchecsConsecutifs,
+      nbSuccesConsecutifs: suivant.nbSuccesConsecutifs,
+      intervalleRevisionJours: suivant.intervalleRevisionJours,
+      derniereRevisionAt: suivant.derniereRevisionAt,
+      prochaineRevisionAt: suivant.prochaineRevisionAt,
+      derniereTentativeAt: suivant.derniereTentativeAt,
     },
   });
 
@@ -347,7 +308,15 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     generateIndiceInBackground(tentative.id, payload, reponseDonnee);
   }
 
-  return { tentativeId: tentative.id, correcte, statutNotion: statut, ficheResume, questionMetacognitive, indice: null };
+  return {
+    tentativeId: tentative.id,
+    correcte,
+    statutNotion: statut,
+    statutPrecedent,
+    ficheResume,
+    questionMetacognitive,
+    indice: null,
+  };
 };
 
 function generateIndiceInBackground(
@@ -386,14 +355,14 @@ export const getTentativeIndice = async (eleveId: string, tentativeId: string) =
   return { indice: tentative.indice };
 };
 
-// ---- Saisie libre (débloquée après maîtrise) ----
+// ---- Saisie libre (débloquée dès que la notion est acquise) ----
 
 export const getNextSaisieLibre = async (eleveId: string, notionId: string) => {
   const progression = await prisma.progressionNotion.findUnique({
     where: { eleveId_notionId: { eleveId, notionId } },
   });
-  if (!progression || progression.statut !== "MAITRISE") {
-    throw new AppError("Cette notion n'est pas encore maîtrisée", 403);
+  if (!estAcquise(progression?.statut)) {
+    throw new AppError("Cette notion n'est pas encore acquise", 403);
   }
   const pool = await prisma.questionSaisieLibre.findMany({
     where: { statut: "PUBLIE", notions: { some: { notionId } } },
@@ -445,7 +414,7 @@ export const getDueRevisions = async (eleveId: string, now = new Date()) => {
   const progressions = await prisma.progressionNotion.findMany({
     where: {
       eleveId,
-      statut: { in: ["FRAGILE", "MAITRISE"] },
+      statut: { not: "NON_VU" },
       prochaineRevisionAt: { lte: now },
       // Une notion sans question publiée ne peut pas être révisée : elle bloquerait la séance.
       notion: {
