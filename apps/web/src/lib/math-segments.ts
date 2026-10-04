@@ -29,6 +29,20 @@ export function decouperMath(texte: string): MathSegment[] {
       continue;
     }
 
+    // Délimiteurs LaTeX \( … \) et \[ … \] : la consigne demande $…$, mais les modèles
+    // d'IA les emploient régulièrement ; on les accepte plutôt que d'afficher du code brut.
+    if (c === "\\" && (texte[i + 1] === "(" || texte[i + 1] === "[")) {
+      const fermeture = texte[i + 1] === "(" ? "\\)" : "\\]";
+      const fin = texte.indexOf(fermeture, i + 2);
+      const tex = fin === -1 ? "" : texte.slice(i + 2, fin).trim();
+      if (tex) {
+        pousserProse();
+        segments.push({ type: texte[i + 1] === "(" ? "en_ligne" : "bloc", tex });
+        i = fin + 2;
+        continue;
+      }
+    }
+
     if (c === "$" && texte[i + 1] === "$") {
       const fin = texte.indexOf("$$", i + 2);
       const tex = fin === -1 ? "" : texte.slice(i + 2, fin).trim();

@@ -41,6 +41,29 @@ describe("decouperMath", () => {
   it("laisse un $$ non fermé en prose", () => {
     expect(decouperMath("début $$x + 1")).toEqual([{ type: "texte", contenu: "début $$x + 1" }]);
   });
+
+  // Cas réels observés dans les sorties de Gemini (octobre 2026).
+  it("accepte les délimiteurs \\( … \\) et \\[ … \\] employés par l'IA", () => {
+    expect(decouperMath(String.raw`Exprime le profit \(\pi(q)\).`)).toEqual([
+      { type: "texte", contenu: "Exprime le profit " },
+      { type: "en_ligne", tex: String.raw`\pi(q)` },
+      { type: "texte", contenu: "." },
+    ]);
+    expect(decouperMath(String.raw`Calcule \[\int_0^1 x\,dx\]`)).toEqual([
+      { type: "texte", contenu: "Calcule " },
+      { type: "bloc", tex: String.raw`\int_0^1 x\,dx` },
+    ]);
+  });
+});
+
+describe("formatMathText (prose)", () => {
+  it("convertit en Unicode les symboles LaTeX écrits hors formule", () => {
+    expect(formatMathText(String.raw`\pi'(q) = 0 et \pi''(q) < 0`)).toBe("π'(q) = 0 et π''(q) < 0");
+    expect(formatMathText(String.raw`x \leq 3 \times y, \Delta \neq 0`)).toBe("x ≤ 3 × y, Δ ≠ 0");
+  });
+  it("laisse intactes les commandes inconnues et les mots qui commencent pareil", () => {
+    expect(formatMathText(String.raw`\frac{1}{2} et \pied`)).toBe(String.raw`\frac{1}{2} et \pied`);
+  });
 });
 
 describe("rendu KaTeX des exemples de référence", () => {

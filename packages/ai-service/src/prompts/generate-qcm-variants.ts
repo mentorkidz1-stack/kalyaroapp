@@ -10,6 +10,7 @@ Pour chaque variante :
 - change les valeurs numériques et/ou le contexte concret (de préférence ancré dans la vie au Bénin), et reformule l'énoncé ;
 - recalcule la bonne réponse avec soin, étape par étape, à partir des NOUVELLES valeurs : une erreur de corrigé est le pire défaut possible ;
 - propose exactement 4 choix tous différents, dont 3 distracteurs plausibles qui correspondent à des erreurs fréquentes (erreur de signe, oubli d'un terme, confusion de formule…) ;
+- les choix emploient exactement les mêmes notations que TON énoncé : si tu renommes la variable (x au lieu de q, B(q) au lieu de π(q)), renomme-la aussi dans les choix ;
 - "bonneReponse" doit être recopiée caractère pour caractère depuis l'un des 4 choix ;
 - les variantes doivent être différentes entre elles.
 

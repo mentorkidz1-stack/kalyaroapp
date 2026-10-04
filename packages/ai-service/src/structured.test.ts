@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { generateStructured, reparerLatexDansJson } from "./structured.js";
-import { BASE_SYSTEM_INSTRUCTIONS } from "./prompts/shared.js";
+import { BASE_SYSTEM_INSTRUCTIONS, consignePublic } from "./prompts/shared.js";
 
 const parse = (json: string) => JSON.parse(reparerLatexDansJson(json)) as { t: string };
 
@@ -47,5 +47,18 @@ describe("BASE_SYSTEM_INSTRUCTIONS", () => {
     expect(BASE_SYSTEM_INSTRUCTIONS).toContain(String.raw`$\frac{3}{4}$`);
     expect(BASE_SYSTEM_INSTRUCTIONS).toContain(String.raw`\begin{cases}`);
     expect(BASE_SYSTEM_INSTRUCTIONS).not.toMatch(/[\f\b]/);
+  });
+
+  it("interdit bien les délimiteurs \\( \\) et \\[ \\] (texte réellement envoyé à l'IA)", () => {
+    expect(BASE_SYSTEM_INSTRUCTIONS).toContain(String.raw`N'utilise jamais \( \) ni \[ \] comme délimiteurs`);
+    expect(BASE_SYSTEM_INSTRUCTIONS).toContain(String.raw`(\pi, \frac…)`);
+  });
+});
+
+describe("consignePublic", () => {
+  it("parle d'étudiant dans le parcours universitaire et d'élève dans le scolaire", () => {
+    expect(consignePublic("UNIVERSITAIRE")).toMatch(/étudiant/);
+    expect(consignePublic("UNIVERSITAIRE")).toMatch(/jamais d'« élève »/);
+    expect(consignePublic("SCOLAIRE")).toMatch(/élève/);
   });
 });
