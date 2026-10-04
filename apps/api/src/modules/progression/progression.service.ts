@@ -13,18 +13,15 @@ import { AppError } from "../../plugins/error-handler.js";
 import { assertMatiereAccessible, getAccessibleMatiereIds } from "../../lib/matiere-access.js";
 import { recordDailyActivity, projectCurrentStreak } from "../../lib/streak.js";
 import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload } from "./attempt-token.js";
+import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
 
 const MASTERY_THRESHOLD = 3;
 const FICHE_RESUME_FAILURE_THRESHOLD = 3;
 const REVISION_INITIAL_INTERVAL_DAYS = 1;
 const REVISION_MAX_INTERVAL_DAYS = 30;
 const METACOGNITIVE_EVERY_N_ATTEMPTS = 3;
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
+/** Fenêtre utilisée pour compter les erreurs « récentes » lors du tri des révisions. */
+const ECHECS_RECENTS_JOURS = 30;
 
 // ---- Mes cours (navigation élève) ----
 
@@ -265,6 +262,7 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     update: {},
   });
 
+  const now = new Date();
   let statut = progression.statut;
   let nbEchecs = progression.nbEchecsConsecutifs;
   let nbSucces = progression.nbSuccesConsecutifs;
@@ -277,18 +275,20 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     if (statut === "MAITRISE") {
       // Révision réussie : on espace davantage la prochaine occurrence (plafonnée).
       intervalleRevisionJours = Math.min(intervalleRevisionJours * 2, REVISION_MAX_INTERVAL_DAYS);
-      derniereRevisionAt = new Date();
-      prochaineRevisionAt = addDays(new Date(), intervalleRevisionJours);
+      derniereRevisionAt = now;
+      prochaineRevisionAt = prochaineRevisionDans(now, intervalleRevisionJours);
       nbSucces += 1;
     } else {
       nbSucces += 1;
       if (nbSucces >= MASTERY_THRESHOLD) {
         statut = "MAITRISE";
         intervalleRevisionJours = REVISION_INITIAL_INTERVAL_DAYS;
-        derniereRevisionAt = new Date();
-        prochaineRevisionAt = addDays(new Date(), intervalleRevisionJours);
-      } else if (statut === "NON_VU") {
+        derniereRevisionAt = now;
+        prochaineRevisionAt = prochaineRevisionDans(now, intervalleRevisionJours);
+      } else {
+        // Notion pas encore maîtrisée : elle revient dans les révisions dès demain.
         statut = "FRAGILE";
+        prochaineRevisionAt = prochaineRevisionDans(now, REVISION_INITIAL_INTERVAL_DAYS);
       }
     }
   } else {
@@ -296,12 +296,11 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     nbEchecs += 1;
     if (statut === "MAITRISE") {
       // Seul cas de régression : un échec de révision ramène la notion en fragile.
-      statut = "FRAGILE";
       intervalleRevisionJours = REVISION_INITIAL_INTERVAL_DAYS;
-      prochaineRevisionAt = null;
-    } else if (statut === "NON_VU") {
-      statut = "FRAGILE";
     }
+    // Toute notion ratée revient dans les révisions dès demain.
+    statut = "FRAGILE";
+    prochaineRevisionAt = prochaineRevisionDans(now, REVISION_INITIAL_INTERVAL_DAYS);
   }
 
   await prisma.progressionNotion.update({
@@ -441,18 +440,78 @@ export const submitFreeAnswer = async (
 
 // ---- Révision espacée ----
 
-export const getDueRevisions = async (eleveId: string) => {
-  const due = await prisma.progressionNotion.findMany({
-    where: { eleveId, statut: "MAITRISE", prochaineRevisionAt: { lte: new Date() } },
-    include: { notion: true },
-    orderBy: [{ nbEchecsConsecutifs: "desc" }, { prochaineRevisionAt: "asc" }],
+export const getDueRevisions = async (eleveId: string, now = new Date()) => {
+  const matiereIds = await getAccessibleMatiereIds(eleveId);
+  const progressions = await prisma.progressionNotion.findMany({
+    where: {
+      eleveId,
+      statut: { in: ["FRAGILE", "MAITRISE"] },
+      prochaineRevisionAt: { lte: now },
+      // Une notion sans question publiée ne peut pas être révisée : elle bloquerait la séance.
+      notion: {
+        chapitre: { cours: { matiereId: { in: matiereIds } } },
+        questionsQcm: { some: { questionQcm: { statut: "PUBLIE" } } },
+      },
+    },
+    include: { notion: { select: { nom: true, chapitreId: true } } },
   });
-  return due.map((p) => ({
-    notionId: p.notionId,
-    nom: p.notion.nom,
-    nbEchecsConsecutifs: p.nbEchecsConsecutifs,
-    prochaineRevisionAt: p.prochaineRevisionAt,
-  }));
+
+  const notionIds = new Set(progressions.map((p) => p.notionId));
+  const echecs =
+    notionIds.size === 0
+      ? []
+      : await prisma.tentativeEleve.findMany({
+          where: {
+            eleveId,
+            typeCible: "QCM",
+            correcte: false,
+            createdAt: { gte: prochaineRevisionDans(now, -ECHECS_RECENTS_JOURS) },
+            questionQcm: { notions: { some: { notionId: { in: [...notionIds] } } } },
+          },
+          select: { createdAt: true, questionQcm: { select: { notions: { select: { notionId: true } } } } },
+        });
+
+  const echecsParNotion = new Map<string, { dernier: Date; nb: number }>();
+  for (const echec of echecs) {
+    for (const { notionId } of echec.questionQcm?.notions ?? []) {
+      if (!notionIds.has(notionId)) continue;
+      const courant = echecsParNotion.get(notionId);
+      echecsParNotion.set(notionId, {
+        dernier: courant && courant.dernier > echec.createdAt ? courant.dernier : echec.createdAt,
+        nb: (courant?.nb ?? 0) + 1,
+      });
+    }
+  }
+
+  const notions = trierNotionsDues(
+    progressions.map((p) => ({
+      notionId: p.notionId,
+      nom: p.notion.nom,
+      chapitreId: p.notion.chapitreId,
+      statut: p.statut,
+      nbEchecsConsecutifs: p.nbEchecsConsecutifs,
+      dernierEchecAt: echecsParNotion.get(p.notionId)?.dernier ?? null,
+      nbEchecsRecents: echecsParNotion.get(p.notionId)?.nb ?? 0,
+      prochaineRevisionAt: p.prochaineRevisionAt!,
+    }))
+  );
+  const seance = planifierSeance(notions);
+
+  return {
+    nbNotionsDues: notions.length,
+    nbQuestions: seance.length,
+    dureeEstimeeMinutes: estimerDureeMinutes(seance.length),
+    notions: notions.map((n) => ({
+      notionId: n.notionId,
+      nom: n.nom,
+      chapitreId: n.chapitreId,
+      statut: n.statut,
+      nbEchecsConsecutifs: n.nbEchecsConsecutifs,
+      prochaineRevisionAt: n.prochaineRevisionAt,
+    })),
+    /** Une entrée par question de la séance : l'id de la notion à interroger, dans l'ordre. */
+    seance,
+  };
 };
 
 // ---- Diagnostic initial de chapitre ----

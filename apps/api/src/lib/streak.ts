@@ -1,10 +1,7 @@
 import { prisma } from "../db/prisma.js";
+import { beninDayKey } from "./benin-day.js";
 
-const BENIN_OFFSET_MS = 60 * 60 * 1000;
-
-export function beninDayKey(date: Date): string {
-  return new Date(date.getTime() + BENIN_OFFSET_MS).toISOString().slice(0, 10);
-}
+export { beninDayKey };
 
 function daysBetweenBeninDayKeys(a: string, b: string): number {
   const msPerDay = 24 * 60 * 60 * 1000;
