@@ -16,6 +16,14 @@ interface DashboardData {
     aretes: number;
   };
   notionsFragiles: { notionId: string; nom: string; nbElevesFragiles: number }[];
+  minQuestionsParNotion: number;
+  notionsAQuestionsInsuffisantes: {
+    notionId: string;
+    nom: string;
+    chapitreId: string;
+    chapitreTitre: string;
+    nbQuestionsPubliees: number;
+  }[];
 }
 
 export function DashboardPage() {
@@ -70,6 +78,46 @@ export function DashboardPage() {
                   <tr key={n.notionId}>
                     <Td>{n.nom}</Td>
                     <Td>{n.nbElevesFragiles}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card>
+
+        <Card className="md:col-span-2">
+          <div className="font-display font-bold text-base text-ink mb-1">
+            Notions à renforcer ({data.notionsAQuestionsInsuffisantes.length})
+          </div>
+          <p className="text-sm text-ink-soft mb-3">
+            Moins de {data.minQuestionsParNotion} questions QCM publiées : un étudiant qui se trompe risque de
+            retomber sur la même question. Ajoute des questions ou génère des variantes.
+          </p>
+          {data.notionsAQuestionsInsuffisantes.length === 0 ? (
+            <p className="text-sm text-ink-soft">Toutes les notions ont assez de questions publiées.</p>
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Notion</Th>
+                  <Th>Chapitre</Th>
+                  <Th>Questions publiées</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.notionsAQuestionsInsuffisantes.map((n) => (
+                  <tr key={n.notionId}>
+                    <Td>{n.nom}</Td>
+                    <Td>
+                      <Link to={`/admin/chapitres/${n.chapitreId}`} className="text-primary-deep underline">
+                        {n.chapitreTitre}
+                      </Link>
+                    </Td>
+                    <Td>
+                      <Badge variant={n.nbQuestionsPubliees === 0 ? "warn" : "fragile"}>
+                        {n.nbQuestionsPubliees} / {data.minQuestionsParNotion}
+                      </Badge>
+                    </Td>
                   </tr>
                 ))}
               </tbody>

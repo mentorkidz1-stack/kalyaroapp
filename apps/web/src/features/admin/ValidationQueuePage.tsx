@@ -6,8 +6,11 @@ import { Card, Button, Badge, Spinner } from "../../design-system";
 interface QcmAValider {
   id: string;
   enonce: string;
+  choix: string[];
+  bonneReponse: string;
   notions: { notion: { nom: string } }[];
   chapitre: { titre: string };
+  varianteDe: { id: string; enonce: string; choix: string[]; bonneReponse: string } | null;
 }
 interface SaisieLibreAValider {
   id: string;
@@ -76,6 +79,10 @@ function QcmQueue() {
     mutationFn: (id: string) => api.patch(`/api/admin/questions-qcm/${id}`, { statut: "PUBLIE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["validation-qcm"] }),
   });
+  const rejeter = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/admin/questions-qcm/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["validation-qcm"] }),
+  });
 
   return (
     <QueueCard title="QCM générés par IA" loading={isLoading} empty={(data?.length ?? 0) === 0}>
@@ -83,6 +90,7 @@ function QcmQueue() {
         <div key={q.id} className="border border-line rounded-[14px] p-3">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge variant="ai">IA</Badge>
+            {q.varianteDe && <Badge variant="manual">Variante</Badge>}
             {q.notions.map((n) => (
               <span key={n.notion.nom} className="text-[11px] font-mono text-ink-soft">
                 {n.notion.nom}
@@ -91,12 +99,47 @@ function QcmQueue() {
             <span className="text-[11px] text-ink-soft">· {q.chapitre.titre}</span>
           </div>
           <p className="text-sm font-semibold text-ink mb-2">{formatMathText(q.enonce)}</p>
-          <Button type="button" variant="ghost" className="w-auto" onClick={() => publier.mutate(q.id)}>
-            Publier
-          </Button>
+          <ChoixAvecCorrige choix={q.choix} bonneReponse={q.bonneReponse} />
+          {q.varianteDe && (
+            <div className="bg-bg rounded-[12px] p-2.5 mb-2">
+              <div className="text-[11px] font-mono text-ink-soft mb-1">QUESTION D'ORIGINE (déjà publiée)</div>
+              <p className="text-xs text-ink mb-1">{formatMathText(q.varianteDe.enonce)}</p>
+              <ChoixAvecCorrige choix={q.varianteDe.choix} bonneReponse={q.varianteDe.bonneReponse} />
+            </div>
+          )}
+          <p className="text-[11px] text-ink-soft mb-2">
+            Vérifie le calcul : la réponse en gras sera présentée comme juste à l'étudiant.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="ghost" className="w-auto" onClick={() => publier.mutate(q.id)}>
+              Publier
+            </Button>
+            <button
+              type="button"
+              className="text-alert text-xs font-mono"
+              onClick={() => {
+                if (window.confirm("Rejeter et supprimer ce QCM ?")) rejeter.mutate(q.id);
+              }}
+            >
+              Rejeter
+            </button>
+          </div>
         </div>
       ))}
     </QueueCard>
+  );
+}
+
+function ChoixAvecCorrige({ choix, bonneReponse }: { choix: string[]; bonneReponse: string }) {
+  return (
+    <ul className="text-xs text-ink-soft mb-2 list-disc list-inside">
+      {choix.map((c) => (
+        <li key={c} className={c === bonneReponse ? "text-primary-deep font-bold" : ""}>
+          {formatMathText(c)}
+          {c === bonneReponse && " ✓"}
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -26,6 +26,14 @@ interface QuestionQcm {
   source: "IA" | "MANUEL";
   statut: "BROUILLON" | "A_VALIDER" | "PUBLIE";
   notions: { notion: Notion }[];
+  varianteDeId: string | null;
+  _count: { variantes: number };
+}
+interface ResultatVariantesLot {
+  questionsTraitees: number;
+  questionsCompletes: number;
+  variantesCreees: number;
+  echecs: { questionId: string; enonce: string; erreur: string }[];
 }
 interface QuestionSaisieLibre {
   id: string;
@@ -323,6 +331,9 @@ function GrapheSection({ chapitreId }: { chapitreId: string }) {
   );
 }
 
+/** Variantes demandées par question : de quoi ne jamais resservir la question ratée. */
+const NOMBRE_VARIANTES = 3;
+
 function QcmSection({ chapitreId }: { chapitreId: string }) {
   const queryClient = useQueryClient();
   const { data: notions } = useNotions(chapitreId);
@@ -337,6 +348,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
   const [notionIds, setNotionIds] = useState<string[]>([]);
   const [nombreIa, setNombreIa] = useState(5);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["questions-qcm", chapitreId] });
 
@@ -376,12 +388,52 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
     mutationFn: (id: string) => api.delete(`/api/admin/questions-qcm/${id}`),
     onSuccess: invalidate,
   });
+  const genererVariantes = useMutation({
+    mutationFn: (id: string) =>
+      api.post<unknown[]>(`/api/admin/questions-qcm/${id}/variantes/generate-ia`, { nombre: NOMBRE_VARIANTES }),
+    onSuccess: (creees) => {
+      setError(null);
+      setInfo(`${creees.length} variante(s) créée(s), à vérifier dans la file de validation.`);
+      invalidate();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
+  });
+  const genererVariantesLot = useMutation({
+    mutationFn: () =>
+      api.post<ResultatVariantesLot>(`/api/admin/chapitres/${chapitreId}/questions-qcm/variantes/generate-ia`, {
+        nombre: NOMBRE_VARIANTES,
+      }),
+    onSuccess: (r) => {
+      setError(
+        r.echecs.length > 0
+          ? `Échec sur ${r.echecs.length} question(s) : ${r.echecs.map((e) => e.erreur).join(" · ")}`
+          : null
+      );
+      setInfo(
+        `${r.variantesCreees} variante(s) créée(s) pour ${r.questionsTraitees} question(s) publiée(s)` +
+          (r.questionsCompletes > 0 ? ` (${r.questionsCompletes} en avaient déjà assez)` : "") +
+          ". À vérifier dans la file de validation."
+      );
+      invalidate();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Erreur"),
+  });
 
   return (
     <Card>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="font-display font-bold text-base text-ink">Banque de questions — QCM</div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-auto"
+            onClick={() => genererVariantesLot.mutate()}
+            disabled={genererVariantesLot.isPending}
+            title={`Complète chaque question publiée jusqu'à ${NOMBRE_VARIANTES} variantes`}
+          >
+            {genererVariantesLot.isPending ? "Variantes en cours…" : "Variantes pour tout le chapitre"}
+          </Button>
           <input
             type="number"
             min={1}
@@ -396,6 +448,7 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
         </div>
       </div>
 
+      {info && <p className="text-sm text-primary-deep mb-3">{info}</p>}
       {isLoading && <Spinner />}
       <div className="space-y-3 mb-4">
         {questions?.map((q) => (
@@ -403,6 +456,10 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <Badge variant={q.source === "IA" ? "ai" : "manual"}>{q.source}</Badge>
               <Badge variant={q.statut === "PUBLIE" ? "ok" : "warn"}>{q.statut}</Badge>
+              {q.varianteDeId && <Badge variant="manual">Variante</Badge>}
+              {q._count.variantes > 0 && (
+                <span className="text-[11px] font-mono text-ink-soft">{q._count.variantes} variante(s)</span>
+              )}
               {q.notions.map((n) => (
                 <span key={n.notion.id} className="text-[11px] font-mono text-ink-soft">
                   {n.notion.nom}
@@ -417,10 +474,22 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
                 </li>
               ))}
             </ul>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               {q.statut !== "PUBLIE" && (
                 <button type="button" className="text-primary-deep text-xs font-mono" onClick={() => publier.mutate(q.id)}>
                   Publier
+                </button>
+              )}
+              {q.statut === "PUBLIE" && (
+                <button
+                  type="button"
+                  className="text-primary-deep text-xs font-mono disabled:opacity-50"
+                  disabled={genererVariantes.isPending}
+                  onClick={() => genererVariantes.mutate(q.id)}
+                >
+                  {genererVariantes.isPending && genererVariantes.variables === q.id
+                    ? "Génération…"
+                    : `Générer ${NOMBRE_VARIANTES} variantes`}
                 </button>
               )}
               <button

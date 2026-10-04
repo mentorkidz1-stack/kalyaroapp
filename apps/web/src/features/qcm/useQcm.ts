@@ -7,7 +7,8 @@ export interface NextQcm {
   enonce: string;
   choix: string[];
   attemptToken: string;
-  reformulee: boolean;
+  /** Variante validée de la question ratée juste avant. */
+  estVariante: boolean;
 }
 export interface FicheResume {
   id: string;
