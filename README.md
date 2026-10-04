@@ -110,7 +110,8 @@ Puis compléter `apps/api/.env` (au minimum `DATABASE_URL` et `JWT_SECRET`).
 # Appliquer toutes les migrations sur une base neuve ou existante
 cd apps/api && npx prisma migrate deploy && cd ../..
 
-# Données de démonstration (comptes admin@kalyaro.bj / eleve.demo@kalyaro.bj, mot de passe kalyaro-demo)
+# Données de démonstration : L1 Sciences économiques et de gestion (2 UE) + une classe de 3e.
+# Comptes (mot de passe kalyaro-demo) : admin@kalyaro.bj, etudiant.demo@kalyaro.bj (L1), eleve.demo@kalyaro.bj (3e)
 npm run prisma:seed
 
 # Explorer les données
