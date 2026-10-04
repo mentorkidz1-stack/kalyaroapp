@@ -12,7 +12,8 @@
     "dev:api": "npm run dev --workspace apps/api",
     "prisma:migrate": "npm run prisma:migrate --workspace apps/api",
     "prisma:seed": "npm run prisma:seed --workspace apps/api",
-    "prisma:studio": "npm run prisma:studio --workspace apps/api"
+    "prisma:studio": "npm run prisma:studio --workspace apps/api",
+    "test": "npm run test --workspaces --if-present"
   },
   "engines": {
     "node": ">=20.0.0"
