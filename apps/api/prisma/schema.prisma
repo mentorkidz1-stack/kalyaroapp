@@ -517,6 +517,15 @@ model PassageEpreuve {
   termineAt     DateTime?   @map("termine_at")
   pointsObtenus Float?      @map("points_obtenus")
   bareme        Float?
+  // ---- Examen blanc (chantier 2.2) ----
+  /// Heure limite de rendu ; null en entraînement.
+  dateLimiteAt         DateTime? @map("date_limite_at")
+  /// Réponses en cours de rédaction, par clé de question : { [cle]: texte }.
+  brouillons           Json?
+  /// Temps passé sur chaque question, en secondes : { [cle]: secondes }.
+  tempsParQuestion     Json?     @map("temps_par_question")
+  /// Verrou de correction : une seule correction groupée à la fois pour un passage.
+  correctionDemarreeAt DateTime? @map("correction_demarree_at")
 
   tentatives TentativeEleve[]
 

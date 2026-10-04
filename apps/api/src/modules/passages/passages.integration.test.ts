@@ -1,5 +1,5 @@
-// Test d'intégration du chantier 2.1 : vrai code et vraie base PostgreSQL, IA simulée.
-// Ignoré par défaut (npm test reste sans base). Pour le lancer, sur une base de DÉVELOPPEMENT
+// Test d'intégration des chantiers 2.1 et 2.2 (épreuves par question, examen blanc) : vrai code et vraie
+// base PostgreSQL, IA simulée. Ignoré par défaut (npm test reste sans base). Pour le lancer, sur une base
 // fraîchement remplie par le seed (il modifie l'épreuve « Partiel L1 ») :
 //   INTEGRATION_DATABASE_URL="postgresql://…/kalyaro" npx vitest run src/modules/passages/passages.integration.test.ts
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -7,9 +7,12 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 const urlBase = process.env.INTEGRATION_DATABASE_URL;
 if (urlBase) process.env.DATABASE_URL = urlBase;
 
+const ia = vi.hoisted(() => ({ enPanne: false }));
+
 vi.mock("@kalyaro/ai-service", () => ({
   // La « copie » contient la note voulue : "PTS:3.5 …"
   gradeExamAnswer: vi.fn(async (input: { reponseEtudiant: string; pointsMax: number }) => {
+    if (ia.enPanne && input.reponseEtudiant.includes("PANNE")) throw new Error("IA indisponible (simulé)");
     const pts = Number(/PTS:([\d.]+)/.exec(input.reponseEtudiant)?.[1] ?? 0);
     return { pointsObtenus: pts, explication: `Noté ${pts}/${input.pointsMax}.`, elementsReussis: ["méthode"], elementsManquants: pts < input.pointsMax ? ["résultat"] : [] };
   }),
@@ -125,5 +128,100 @@ describe.skipIf(!urlBase)("chantier 2.1 — bout en bout (base locale, IA simul�
     const p = await passages.demarrerPassage(etudiant.id, examStats.id);
     await expect(passages.getPassage(autre.id, p.passageId)).rejects.toThrow(/introuvable/);
     await expect(passages.demarrerPassage(autre.id, partiel.id)).rejects.toThrow(/introuvable/);
+  });
+
+  // ---- Chantier 2.2 : examen blanc (s'appuie sur le découpage du Partiel L1 fait plus haut) ----
+
+  it("examen blanc : chronomètre, pas de correction avant la fin, reprise du même examen", async () => {
+    await prisma.epreuve.update({ where: { id: partiel.id }, data: { dureeMinutes: 90 } });
+    const avant = Date.now();
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    expect(p.mode).toBe("EXAMEN_BLANC");
+    const limite = new Date(p.examen!.dateLimiteAt!).getTime();
+    expect(limite - avant).toBeGreaterThanOrEqual(90 * 60_000 - 1000);
+    expect(limite - avant).toBeLessThan(90 * 60_000 + 5000);
+    expect(p.reponses).toEqual({});
+
+    await expect(passages.repondreQuestion(etudiant.id, p.passageId, p.questions[0]!.cle, "PTS:4")).rejects.toThrow(/remise de la copie/);
+    const encore = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    expect(encore.passageId).toBe(p.passageId);
+  });
+
+  it("examen blanc : brouillons enregistrés sans s'écraser, remise, correction groupée, rapport et révisions", async () => {
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    const [q1, q2, q3, q4] = p.questions;
+    // Deux enregistrements simultanés sur deux questions : aucun ne doit écraser l'autre.
+    await Promise.all([
+      passages.enregistrerBrouillon(etudiant.id, p.passageId, q1!.cle, "PTS:4 brouillon", 300),
+      passages.enregistrerBrouillon(etudiant.id, p.passageId, q2!.cle, "PTS:1 brouillon", 50),
+    ]);
+    await passages.enregistrerBrouillon(etudiant.id, p.passageId, q2!.cle, "PTS:5 version finale", 40);
+    const repris = await passages.getPassage(etudiant.id, p.passageId);
+    expect(repris.examen!.brouillons).toEqual({ [q1!.cle]: "PTS:4 brouillon", [q2!.cle]: "PTS:5 version finale" });
+    expect(repris.reponses).toEqual({});
+
+    // Remise : le dernier état envoyé par le client complète les brouillons ; q4 laissée vide.
+    const rapport = await passages.rendreExamen(etudiant.id, p.passageId, { [q3!.cle]: "PTS:1 rendue à la fin", [q4!.cle]: "  " });
+    expect(rapport.termine).toBe(true);
+    expect(rapport.correctionIncomplete).toBe(false);
+    expect(rapport.parQuestion.map((q) => [q.numero, q.pointsObtenus, q.repondue])).toEqual([
+      ["1", 4, true],
+      ["2.a", 5, true],
+      ["2.b", 1, true],
+      ["3", 0, false],
+    ]);
+    expect(rapport.note).toBe(10);
+    // Temps : 300 s plafonnés à 120 s par enregistrement ; 50 + 40 s pour q2.
+    expect(rapport.temps!.parQuestion.map((t) => [t.numero, t.tempsSecondes, t.tempsConseilleSecondes])).toEqual([
+      ["1", 120, 1080],
+      ["2.a", 90, 1620],
+      ["2.b", 0, 1080],
+      ["3", 0, 1620],
+    ]);
+    // Notions prioritaires = celles qui ont coûté le plus de points, mises en révision immédiate.
+    expect(rapport.notionsPrioritaires.map((n) => [n.notionNom, n.pointsPerdus])).toEqual([
+      ["Optimisation économique", 6],
+      ["Calcul de dérivées", 4],
+    ]);
+    const progressions = await prisma.progressionNotion.findMany({
+      where: { eleveId: etudiant.id, notionId: { in: rapport.notionsPrioritaires.map((n) => n.notionId) } },
+    });
+    expect(progressions).toHaveLength(2);
+    for (const pr of progressions) expect(pr.prochaineRevisionAt!.getTime()).toBeLessThanOrEqual(Date.now());
+
+    // Idempotent : une deuxième remise ne recorrige rien ; plus aucun brouillon accepté.
+    const encore = await passages.rendreExamen(etudiant.id, p.passageId);
+    expect(encore.note).toBe(10);
+    expect(await prisma.tentativeEleve.count({ where: { passageId: p.passageId } })).toBe(3);
+    await expect(passages.enregistrerBrouillon(etudiant.id, p.passageId, q1!.cle, "trop tard", 5)).rejects.toThrow(/écoulé/);
+    const vue = await passages.getPassage(etudiant.id, p.passageId);
+    expect(Object.keys(vue.reponses)).toHaveLength(3);
+  });
+
+  it("examen blanc abandonné : rendu automatiquement après l'heure limite", async () => {
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    await passages.enregistrerBrouillon(etudiant.id, p.passageId, p.questions[0]!.cle, "PTS:3 seul brouillon", 60);
+    await prisma.passageEpreuve.update({ where: { id: p.passageId }, data: { dateLimiteAt: new Date(Date.now() - 60_000) } });
+    await expect(passages.enregistrerBrouillon(etudiant.id, p.passageId, p.questions[1]!.cle, "PTS:8", 10)).rejects.toThrow(/écoulé/);
+    const vue = await passages.getPassage(etudiant.id, p.passageId);
+    expect(vue.termine).toBe(true);
+    const rapport = await passages.getRapport(etudiant.id, p.passageId);
+    expect(rapport.note).toBe(3);
+  });
+
+  it("examen blanc : une panne IA à la correction laisse le rapport incomplet, relançable sans doublon", async () => {
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    ia.enPanne = true;
+    const r1 = await passages.rendreExamen(etudiant.id, p.passageId, {
+      [p.questions[0]!.cle]: "PTS:4",
+      [p.questions[1]!.cle]: "PTS:6 PANNE",
+    });
+    expect(r1.correctionIncomplete).toBe(true);
+    expect((await prisma.passageEpreuve.findUniqueOrThrow({ where: { id: p.passageId } })).pointsObtenus).toBeNull();
+    ia.enPanne = false;
+    const r2 = await passages.rendreExamen(etudiant.id, p.passageId);
+    expect(r2.correctionIncomplete).toBe(false);
+    expect(r2.note).toBe(10);
+    expect(await prisma.tentativeEleve.count({ where: { passageId: p.passageId } })).toBe(2);
   });
 });
