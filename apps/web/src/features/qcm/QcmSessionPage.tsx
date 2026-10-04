@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
 import { AppHeader } from "../../components/AppHeader";
 import {
   Button,
@@ -15,6 +14,7 @@ import {
   MasteryCelebration,
   niveauAMonte,
   type NiveauMaitrise,
+  MathText,
 } from "../../design-system";
 import { useQcmNext, useSubmitQcm, useTentativeIndice, type RepondreResult } from "./useQcm";
 
@@ -164,7 +164,7 @@ export function QcmSessionPage() {
         )}
         {question && (
           <Card className={`transition-opacity duration-150 ${isTransitioning ? "opacity-0" : "opacity-100"}`}>
-            <h3 className="font-display text-[19px] leading-snug text-ink mb-4">{formatMathText(question.enonce)}</h3>
+            <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
             {question.choix.map((choix) => {
               const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
               return (
@@ -174,7 +174,7 @@ export function QcmSessionPage() {
                   disabled={!!result || submitMutation.isPending}
                   onClick={() => handleChoice(choix)}
                 >
-                  {formatMathText(choix)}
+                  <MathText text={choix} />
                 </ChoiceButton>
               );
             })}
@@ -191,7 +191,7 @@ export function QcmSessionPage() {
                   {result.correcte
                     ? "Bien joué, c'est la bonne réponse !"
                     : polledIndice
-                      ? formatMathText(polledIndice)
+                      ? <MathText text={polledIndice} />
                       : indicePollExhausted
                         ? "Pas tout à fait — retente une prochaine fois."
                         : "Pas tout à fait… un instant, on prépare une explication."}
@@ -204,13 +204,13 @@ export function QcmSessionPage() {
                 <div className="font-mono text-[11px] uppercase tracking-wide text-[#8A5A0E] mb-2">
                   Fiche résumé
                 </div>
-                <div className="text-sm text-ink whitespace-pre-wrap">{formatMathText(result.ficheResume.contenu)}</div>
+                <div className="text-sm text-ink whitespace-pre-wrap"><MathText text={result.ficheResume.contenu} /></div>
               </Card>
             )}
 
             {result?.questionMetacognitive && !metaSubmitted && (
               <Card className="mt-4 fade-in">
-                <p className="text-sm font-semibold text-ink mb-2">{formatMathText(result.questionMetacognitive.enonce)}</p>
+                <p className="text-sm font-semibold text-ink mb-2"><MathText text={result.questionMetacognitive.enonce} /></p>
                 <textarea
                   value={metaReponse}
                   onChange={(e) => setMetaReponse(e.target.value)}

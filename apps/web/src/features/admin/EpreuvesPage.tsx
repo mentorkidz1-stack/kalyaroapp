@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
-import { Card, Button, Badge, FormField, fieldInputClass, Spinner } from "../../design-system";
+import { Card, Button, Badge, FormField, fieldInputClass, Spinner, MathText } from "../../design-system";
 
 interface Classe {
   id: string;
@@ -252,7 +251,7 @@ function EpreuvesForMatiere({ matiereId }: { matiereId: string }) {
               onClick={() => setSelected(selected === e.id ? null : e.id)}
               className="text-sm font-semibold text-ink text-left"
             >
-              {formatMathText(e.enonce)}
+              <MathText text={e.enonce} />
             </button>
             {selected === e.id && <CorrigesList epreuveId={e.id} />}
           </div>
@@ -378,7 +377,7 @@ function CorrigesList({ epreuveId }: { epreuveId: string }) {
               <Badge variant={c.statutValidation === "VALIDE" ? "ok" : "warn"}>{c.statutValidation}</Badge>
               {c.estPrincipal && <Badge variant="ai">Principal</Badge>}
             </div>
-            <p className="text-xs text-ink whitespace-pre-wrap mb-1">{formatMathText(c.contenu)}</p>
+            <p className="text-xs text-ink whitespace-pre-wrap mb-1"><MathText text={c.contenu} /></p>
             {c.statutValidation !== "VALIDE" && (
               <button type="button" className="text-primary-deep text-xs font-mono" onClick={() => valider.mutate(c.id)}>
                 Valider

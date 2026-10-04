@@ -14,6 +14,53 @@ function stripMarkdownFences(text: string): string {
   return fenced ? fenced[1] ?? trimmed : trimmed;
 }
 
+// Commandes LaTeX dont l'initiale coïncide avec un échappement JSON valide (\b \f \n \r \t \u) :
+// "\frac" non doublé par l'IA serait lu sans erreur comme saut de page + "rac". On ne les
+// répare que si le mot entier est une commande connue, pour ne pas toucher aux vrais "\n".
+const COMMANDES_LATEX_AMBIGUES = new Set([
+  "begin", "beta", "bar", "big", "Big", "bigg", "binom", "bmatrix", "boxed", "bullet",
+  "frac", "dfrac", "forall", "flat",
+  "nabla", "neq", "not", "notin", "nu", "newline",
+  "right", "rightarrow", "Rightarrow", "rho", "rangle", "rbrace", "rfloor", "rceil",
+  "times", "theta", "Theta", "tau", "tan", "text", "textbf", "textit", "tfrac", "to", "top", "triangle", "tilde",
+  "underline", "underbrace", "upsilon", "uparrow", "cup",
+]);
+const INITIALES_ECHAPPEMENT_JSON = new Set(["b", "f", "n", "r", "t", "u"]);
+
+/**
+ * Double les barres obliques inverses LaTeX que l'IA a oublié d'échapper dans ses chaînes
+ * JSON. Laisse intacts les échappements déjà corrects (\\, \", \/, \n de fin de ligne…).
+ */
+export function reparerLatexDansJson(json: string): string {
+  let out = "";
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i]!;
+    if (c !== "\\") {
+      out += c;
+      continue;
+    }
+    const suivant = json[i + 1];
+    if (suivant === undefined) {
+      out += c;
+      continue;
+    }
+    if (suivant === "\\" || suivant === '"' || suivant === "/") {
+      out += c + suivant;
+      i++;
+      continue;
+    }
+    if (/[a-zA-Z]/.test(suivant)) {
+      const mot = /^[a-zA-Z]+/.exec(json.slice(i + 1))![0];
+      const echappementJson = INITIALES_ECHAPPEMENT_JSON.has(suivant) && !COMMANDES_LATEX_AMBIGUES.has(mot);
+      out += echappementJson ? c : "\\\\";
+      continue;
+    }
+    // \{ \} \, \; \! \  … : échappements JSON invalides, forcément du LaTeX.
+    out += "\\\\";
+  }
+  return out;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -41,7 +88,7 @@ export async function generateStructured<T>(
 
     try {
       const raw = await provider.complete(system, prompt);
-      const parsed = JSON.parse(stripMarkdownFences(raw));
+      const parsed = JSON.parse(reparerLatexDansJson(stripMarkdownFences(raw)));
       return options.schema.parse(parsed);
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);

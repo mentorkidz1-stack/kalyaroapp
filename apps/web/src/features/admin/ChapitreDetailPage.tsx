@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
-import { Card, Button, Badge, FormField, fieldInputClass, Spinner, Table, Th, Td } from "../../design-system";
+import { Card, Button, Badge, FormField, fieldInputClass, Spinner, Table, Th, Td, MathText } from "../../design-system";
 
 interface Notion {
   id: string;
@@ -466,11 +465,11 @@ function QcmSection({ chapitreId }: { chapitreId: string }) {
                 </span>
               ))}
             </div>
-            <p className="text-sm font-semibold text-ink mb-2">{formatMathText(q.enonce)}</p>
+            <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
             <ul className="text-xs text-ink-soft mb-2 list-disc list-inside">
               {q.choix.map((c) => (
                 <li key={c} className={c === q.bonneReponse ? "text-primary-deep font-bold" : ""}>
-                  {formatMathText(c)}
+                  <MathText text={c} />
                 </li>
               ))}
             </ul>
@@ -632,8 +631,8 @@ function SaisieLibreSection({ chapitreId }: { chapitreId: string }) {
               <Badge variant={q.source === "IA" ? "ai" : "manual"}>{q.source}</Badge>
               <Badge variant={q.statut === "PUBLIE" ? "ok" : "warn"}>{q.statut}</Badge>
             </div>
-            <p className="text-sm font-semibold text-ink mb-1">{formatMathText(q.enonce)}</p>
-            <p className="text-xs text-ink-soft mb-2">Référence : {formatMathText(q.reponseReference)}</p>
+            <p className="text-sm font-semibold text-ink mb-1"><MathText text={q.enonce} /></p>
+            <p className="text-xs text-ink-soft mb-2">Référence : <MathText text={q.reponseReference} /></p>
             <div className="flex gap-3">
               {q.statut !== "PUBLIE" && (
                 <button type="button" className="text-primary-deep text-xs font-mono" onClick={() => publier.mutate(q.id)}>

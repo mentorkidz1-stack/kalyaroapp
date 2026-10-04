@@ -3,10 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { compressImage } from "../../lib/image-compress";
-import { formatMathText } from "../../lib/format-math";
 import { AppHeader } from "../../components/AppHeader";
 import { AuthedPdfFrame } from "../../components/AuthedPdfFrame";
-import { Button, Card, LoadingState, ErrorState } from "../../design-system";
+import { Button, Card, LoadingState, ErrorState, MathText } from "../../design-system";
 
 const MAX_PHOTOS = 5;
 
@@ -159,7 +158,7 @@ export function EvaluationSessionPage() {
         <Card>
           {copie.evaluation.enonce && (
             <h3 className="font-display text-[17px] leading-snug text-ink mb-4 whitespace-pre-wrap">
-              {formatMathText(copie.evaluation.enonce)}
+              <MathText text={copie.evaluation.enonce} />
             </h3>
           )}
           {copie.evaluation.aUnPdf && (

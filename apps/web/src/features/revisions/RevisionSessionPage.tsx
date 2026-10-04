@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
 import { AppHeader } from "../../components/AppHeader";
 import {
   Button,
@@ -15,6 +14,7 @@ import {
   MasteryBadge,
   MasteryCelebration,
   niveauAMonte,
+  MathText,
 } from "../../design-system";
 import { useSubmitQcm, useTentativeIndice, type NextQcm, type RepondreResult } from "../qcm/useQcm";
 import { REVISIONS_DUES_KEY, type RevisionsDues } from "./useRevisions";
@@ -155,7 +155,7 @@ export function RevisionSessionPage() {
         )}
         {question && !enChargement && (
           <Card>
-            <h3 className="font-display text-[19px] leading-snug text-ink mb-4">{formatMathText(question.enonce)}</h3>
+            <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
             {question.choix.map((choix) => {
               const state = result && selected === choix ? (result.correcte ? "correct" : "wrong") : "default";
               return (
@@ -165,7 +165,7 @@ export function RevisionSessionPage() {
                   disabled={!!result || submitMutation.isPending}
                   onClick={() => handleChoice(choix)}
                 >
-                  {formatMathText(choix)}
+                  <MathText text={choix} />
                 </ChoiceButton>
               );
             })}
@@ -182,7 +182,7 @@ export function RevisionSessionPage() {
                   {result.correcte
                     ? "Bien joué, c'est la bonne réponse !"
                     : indice
-                      ? formatMathText(indice)
+                      ? <MathText text={indice} />
                       : indiceExhausted
                         ? "Pas tout à fait — cette notion reviendra demain."
                         : "Pas tout à fait… un instant, on prépare une explication."}
@@ -198,7 +198,7 @@ export function RevisionSessionPage() {
             {result?.ficheResume && (
               <Card className="mt-4 bg-accent-tint border-accent fade-in">
                 <div className="font-mono text-[11px] uppercase tracking-wide text-[#8A5A0E] mb-2">Fiche résumé</div>
-                <div className="text-sm text-ink whitespace-pre-wrap">{formatMathText(result.ficheResume.contenu)}</div>
+                <div className="text-sm text-ink whitespace-pre-wrap"><MathText text={result.ficheResume.contenu} /></div>
               </Card>
             )}
 

@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
 import { PhotoGallery } from "../../components/PhotoGallery";
-import { Card, Button, Badge, FormField, fieldInputClass, Spinner } from "../../design-system";
+import { Card, Button, Badge, FormField, fieldInputClass, Spinner, MathText } from "../../design-system";
 
 interface CopieDetail {
   id: string;
@@ -99,7 +98,7 @@ export function CopieDetailPage() {
         {enonce && (
           <div className="mb-4">
             <div className="text-xs font-mono uppercase text-ink-soft mb-1">Énoncé</div>
-            <p className="text-sm text-ink whitespace-pre-wrap">{formatMathText(enonce)}</p>
+            <p className="text-sm text-ink whitespace-pre-wrap"><MathText text={enonce} /></p>
           </div>
         )}
         {copie.reponseDonnee && (
@@ -194,14 +193,14 @@ export function CopieDetailPage() {
             Note : {copie.noteObtenue} / {copie.evaluation.bareme}
           </p>
           {copie.commentaireAdmin && (
-            <p className="text-sm text-ink-soft mt-2">{formatMathText(copie.commentaireAdmin)}</p>
+            <p className="text-sm text-ink-soft mt-2"><MathText text={copie.commentaireAdmin} /></p>
           )}
           {copie.pointsForts.length > 0 && (
             <div className="mt-3">
               <div className="text-xs font-mono uppercase text-ink-soft mb-1">Points forts</div>
               <ul className="text-sm text-ink-soft list-disc list-inside">
                 {copie.pointsForts.map((point, i) => (
-                  <li key={i}>{formatMathText(point)}</li>
+                  <li key={i}><MathText text={point} /></li>
                 ))}
               </ul>
             </div>
@@ -211,7 +210,7 @@ export function CopieDetailPage() {
               <div className="text-xs font-mono uppercase text-ink-soft mb-1">Points à travailler</div>
               <ul className="text-sm text-ink-soft list-disc list-inside">
                 {copie.pointsATravailler.map((point, i) => (
-                  <li key={i}>{formatMathText(point)}</li>
+                  <li key={i}><MathText text={point} /></li>
                 ))}
               </ul>
             </div>

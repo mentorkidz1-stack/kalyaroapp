@@ -1,11 +1,10 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
 import { AppHeader } from "../../components/AppHeader";
 import { PhotoGallery } from "../../components/PhotoGallery";
 import { AuthedPdfFrame } from "../../components/AuthedPdfFrame";
-import { Card, Button, LoadingState, ErrorState } from "../../design-system";
+import { Card, Button, LoadingState, ErrorState, MathText } from "../../design-system";
 
 interface CopieResponse {
   copieId: string;
@@ -81,14 +80,14 @@ export function EvaluationResultPage() {
                 {copie.noteObtenue} / {copie.evaluation.bareme}
               </p>
               {copie.commentaireAdmin && (
-                <p className="text-sm text-ink-soft mb-4">{formatMathText(copie.commentaireAdmin)}</p>
+                <p className="text-sm text-ink-soft mb-4"><MathText text={copie.commentaireAdmin} /></p>
               )}
               {copie.pointsForts.length > 0 && (
                 <div className="text-left mb-4">
                   <div className="text-xs font-mono uppercase text-ink-soft mb-1">Points forts</div>
                   <ul className="text-sm text-ink list-disc list-inside">
                     {copie.pointsForts.map((point, i) => (
-                      <li key={i}>{formatMathText(point)}</li>
+                      <li key={i}><MathText text={point} /></li>
                     ))}
                   </ul>
                 </div>
@@ -98,7 +97,7 @@ export function EvaluationResultPage() {
                   <div className="text-xs font-mono uppercase text-ink-soft mb-1">À travailler</div>
                   <ul className="text-sm text-ink list-disc list-inside">
                     {copie.pointsATravailler.map((point, i) => (
-                      <li key={i}>{formatMathText(point)}</li>
+                      <li key={i}><MathText text={point} /></li>
                     ))}
                   </ul>
                 </div>

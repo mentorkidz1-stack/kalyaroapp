@@ -2,10 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
 import { useAuthStore } from "../../stores/auth";
 import { AppHeader } from "../../components/AppHeader";
-import { Card, Button, LoadingState, EmptyState, ErrorState } from "../../design-system";
+import { Card, Button, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
 import { useStreak } from "../streak/useStreak";
 
 interface Matiere {
@@ -87,7 +86,7 @@ export function EpreuvesListPage() {
             )}
             {epreuves?.map((e) => (
               <Card key={e.id}>
-                <p className="text-sm font-semibold text-ink mb-3">{formatMathText(e.enonce)}</p>
+                <p className="text-sm font-semibold text-ink mb-3"><MathText text={e.enonce} /></p>
                 <Button
                   className="w-auto"
                   onClick={() => navigate(`/epreuves/passage/${e.id}`, { state: { enonce: e.enonce } })}

@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, FeedbackBlock, LoadingState, EmptyState, ErrorState } from "../../design-system";
+import { Button, Card, FeedbackBlock, LoadingState, EmptyState, ErrorState, MathText } from "../../design-system";
 
 interface NextSaisieLibre {
   id: string;
@@ -87,7 +86,7 @@ export function SaisieLibrePage() {
 
         {question && (
           <Card>
-            <h3 className="font-display text-[19px] leading-snug text-ink mb-4">{formatMathText(question.enonce)}</h3>
+            <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
             <textarea
               value={reponse}
               onChange={(e) => setReponse(e.target.value)}
@@ -97,7 +96,7 @@ export function SaisieLibrePage() {
             />
 
             {result && (
-              <FeedbackBlock variant={result.valide ? "ok" : "warn"}>{formatMathText(result.explication)}</FeedbackBlock>
+              <FeedbackBlock variant={result.valide ? "ok" : "warn"}><MathText text={result.explication} /></FeedbackBlock>
             )}
 
             <div className="mt-4">

@@ -26,6 +26,7 @@ import { ValidationQueuePage } from "./features/admin/ValidationQueuePage";
 import { EvaluationsPage } from "./features/admin/EvaluationsPage";
 import { CorrectionQueuePage } from "./features/admin/CorrectionQueuePage";
 import { CopieDetailPage } from "./features/admin/CopieDetailPage";
+import { DemoMathsPage } from "./features/admin/DemoMathsPage";
 
 function RequireAuth() {
   const token = useAuthStore((s) => s.token);
@@ -79,6 +80,7 @@ export const router = createBrowserRouter([
               { path: "copies", element: <CorrectionQueuePage /> },
               { path: "copies/:copieId", element: <CopieDetailPage /> },
               { path: "validation", element: <ValidationQueuePage /> },
+              { path: "demo-maths", element: <DemoMathsPage /> },
             ],
           },
         ],

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { formatMathText } from "../../lib/format-math";
-import { Card, Button, Badge, Spinner } from "../../design-system";
+import { Card, Button, Badge, Spinner, MathText } from "../../design-system";
 
 interface QcmAValider {
   id: string;
@@ -98,12 +97,12 @@ function QcmQueue() {
             ))}
             <span className="text-[11px] text-ink-soft">· {q.chapitre.titre}</span>
           </div>
-          <p className="text-sm font-semibold text-ink mb-2">{formatMathText(q.enonce)}</p>
+          <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
           <ChoixAvecCorrige choix={q.choix} bonneReponse={q.bonneReponse} />
           {q.varianteDe && (
             <div className="bg-bg rounded-[12px] p-2.5 mb-2">
               <div className="text-[11px] font-mono text-ink-soft mb-1">QUESTION D'ORIGINE (déjà publiée)</div>
-              <p className="text-xs text-ink mb-1">{formatMathText(q.varianteDe.enonce)}</p>
+              <p className="text-xs text-ink mb-1"><MathText text={q.varianteDe.enonce} /></p>
               <ChoixAvecCorrige choix={q.varianteDe.choix} bonneReponse={q.varianteDe.bonneReponse} />
             </div>
           )}
@@ -135,7 +134,7 @@ function ChoixAvecCorrige({ choix, bonneReponse }: { choix: string[]; bonneRepon
     <ul className="text-xs text-ink-soft mb-2 list-disc list-inside">
       {choix.map((c) => (
         <li key={c} className={c === bonneReponse ? "text-primary-deep font-bold" : ""}>
-          {formatMathText(c)}
+          <MathText text={c} />
           {c === bonneReponse && " ✓"}
         </li>
       ))}
@@ -166,7 +165,7 @@ function SaisieLibreQueue() {
               </span>
             ))}
           </div>
-          <p className="text-sm font-semibold text-ink mb-2">{formatMathText(q.enonce)}</p>
+          <p className="text-sm font-semibold text-ink mb-2"><MathText text={q.enonce} /></p>
           <Button type="button" variant="ghost" className="w-auto" onClick={() => publier.mutate(q.id)}>
             Publier
           </Button>
@@ -192,7 +191,7 @@ function FichesQueue() {
       {data?.map((f) => (
         <div key={f.id} className="border border-line rounded-[14px] p-3">
           <div className="text-[11px] font-mono text-ink-soft mb-1">{f.notion.nom}</div>
-          <p className="text-sm text-ink whitespace-pre-wrap mb-2">{formatMathText(f.contenu)}</p>
+          <p className="text-sm text-ink whitespace-pre-wrap mb-2"><MathText text={f.contenu} /></p>
           <Button type="button" variant="ghost" className="w-auto" onClick={() => publier.mutate(f.id)}>
             Publier
           </Button>
@@ -265,8 +264,8 @@ function CorrigesQueue() {
     <QueueCard title="Corrigés-types générés par IA" loading={isLoading} empty={(data?.length ?? 0) === 0}>
       {data?.map((c) => (
         <div key={c.id} className="border border-line rounded-[14px] p-3">
-          <div className="text-[11px] text-ink-soft mb-1">{formatMathText(c.epreuve.enonce)}</div>
-          <p className="text-sm text-ink whitespace-pre-wrap mb-2">{formatMathText(c.contenu)}</p>
+          <div className="text-[11px] text-ink-soft mb-1"><MathText text={c.epreuve.enonce} /></div>
+          <p className="text-sm text-ink whitespace-pre-wrap mb-2"><MathText text={c.contenu} /></p>
           <Button type="button" variant="ghost" className="w-auto" onClick={() => valider.mutate(c.id)}>
             Valider
           </Button>
