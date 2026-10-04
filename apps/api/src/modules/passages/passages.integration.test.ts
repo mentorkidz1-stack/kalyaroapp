@@ -27,6 +27,16 @@ vi.mock("@kalyaro/ai-service", () => ({
       { numero: "3", enonce: "Profit maximal.", points: 4, notion: null },
     ],
   })),
+  // La « photo » est un texte « 1=PTS:4 ma réponse|2=… » ; « ILLISIBLE » simule une photo floue.
+  transcribeHandwrittenAnswer: vi.fn(async (_input: unknown, images: { base64: string }[]) => {
+    const texte = images.map((i) => Buffer.from(i.base64, "base64").toString("utf8")).join("|");
+    if (texte.includes("ILLISIBLE")) return { lisible: false, questions: [], remarque: "Photo floue : reprends-la à la lumière." };
+    const questions = texte.split("|").map((part) => {
+      const [numero, ...reste] = part.split("=");
+      return { numero: numero!.trim(), transcription: reste.join("=") };
+    });
+    return { lisible: true, questions, remarque: null };
+  }),
   generateAnswerKey: vi.fn(),
   AiGenerationError: class extends Error {},
 }));
@@ -223,5 +233,70 @@ describe.skipIf(!urlBase)("chantier 2.1 — bout en bout (base locale, IA simul�
     expect(r2.correctionIncomplete).toBe(false);
     expect(r2.note).toBe(10);
     expect(await prisma.tentativeEleve.count({ where: { passageId: p.passageId } })).toBe(2);
+  });
+
+  // ---- Copie papier photographiée ----
+  const photo = (texte: string) => ({ buffer: Buffer.from(texte, "utf8"), mimeType: "image/jpeg" as const });
+
+  it("entraînement : réponse en photo transcrite puis notée, photo illisible refusée sans rien enregistrer", async () => {
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id);
+    const q = p.questions[1]!; // « 2.a »
+    await expect(passages.repondreQuestionPhoto(etudiant.id, p.passageId, q.cle, [photo("ILLISIBLE")])).rejects.toThrow(/floue/);
+    expect(await prisma.tentativeEleve.count({ where: { passageId: p.passageId } })).toBe(0);
+
+    // Numérotation écrite « Q2.a) » par l'étudiant : rattachée à la question « 2.a ».
+    const r = await passages.repondreQuestionPhoto(etudiant.id, p.passageId, q.cle, [photo("Q2.a)=PTS:4.5 π(q) = −q² + 80q − 300")]);
+    expect(r.transcription).toBe("PTS:4.5 π(q) = −q² + 80q − 300");
+    expect(r.pointsObtenus).toBe(4.5);
+    const t = await prisma.tentativeEleve.findFirstOrThrow({ where: { passageId: p.passageId } });
+    expect(t.reponseDonnee).toBe("PTS:4.5 π(q) = −q² + 80q − 300");
+    expect((t.evaluationIa as { depuisPhoto?: boolean }).depuisPhoto).toBe(true);
+    const vue = await passages.getPassage(etudiant.id, p.passageId);
+    expect(vue.reponses[q.cle]!.depuisPhoto).toBe(true);
+  });
+
+  it("examen blanc sur papier : pages lues à l'envoi, délai photo après l'heure limite, réponse = tapé + photo", async () => {
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    const [q1, q2, q3] = p.questions;
+    await expect(passages.ajouterPhotosCopie(etudiant.id, p.passageId, [photo("1=PTS:4")])).rejects.toThrow(/sur papier/);
+    const papier = await passages.choisirCopiePapier(etudiant.id, p.passageId, true);
+    expect(papier.examen!.copiePapier).toBe(true);
+
+    await passages.enregistrerBrouillon(etudiant.id, p.passageId, q1!.cle, "PTS:1 début tapé", 30);
+    const page1 = await passages.ajouterPhotosCopie(etudiant.id, p.passageId, [photo("1=PTS:2 suite sur papier|2.a=PTS:5 dérivée")]);
+    expect(page1.nbPages).toBe(1);
+    expect(page1.transcriptions).toEqual({ [q1!.cle]: "PTS:2 suite sur papier", [q2!.cle]: "PTS:5 dérivée" });
+    await expect(passages.ajouterPhotosCopie(etudiant.id, p.passageId, [photo("ILLISIBLE")])).rejects.toThrow(/floue/);
+
+    // Heure limite dépassée : plus de saisie au clavier, mais encore 10 min pour photographier.
+    await prisma.passageEpreuve.update({ where: { id: p.passageId }, data: { dateLimiteAt: new Date(Date.now() - 2 * 60_000) } });
+    await expect(passages.enregistrerBrouillon(etudiant.id, p.passageId, q3!.cle, "trop tard", 5)).rejects.toThrow(/écoulé/);
+    const vue = await passages.getPassage(etudiant.id, p.passageId);
+    expect(vue.termine).toBe(false); // pas de remise automatique pendant le délai photo
+    const page2 = await passages.ajouterPhotosCopie(etudiant.id, p.passageId, [photo("2.b=PTS:3 calcul")]);
+    expect(page2.nbPages).toBe(2);
+
+    const rapport = await passages.rendreExamen(etudiant.id, p.passageId);
+    // Question 1 : la réponse notée combine le texte tapé et la photo (le simulateur lit le 1er PTS).
+    const tentatives = await prisma.tentativeEleve.findMany({ where: { passageId: p.passageId } });
+    const t1 = tentatives.find((t) => t.questionEpreuveId === q1!.cle)!;
+    expect(t1.reponseDonnee).toBe("PTS:1 début tapé\n\nPTS:2 suite sur papier");
+    expect(rapport.parQuestion.map((x) => [x.numero, x.pointsObtenus])).toEqual([
+      ["1", 1],
+      ["2.a", 5],
+      ["2.b", 3],
+      ["3", 0],
+    ]);
+  });
+
+  it("examen blanc sur papier : remise automatique seulement après le délai photo", async () => {
+    const p = await passages.demarrerPassage(etudiant.id, partiel.id, "EXAMEN_BLANC");
+    await passages.choisirCopiePapier(etudiant.id, p.passageId, true);
+    await passages.ajouterPhotosCopie(etudiant.id, p.passageId, [photo("1=PTS:3")]);
+    await prisma.passageEpreuve.update({ where: { id: p.passageId }, data: { dateLimiteAt: new Date(Date.now() - 11 * 60_000) } });
+    await expect(passages.ajouterPhotosCopie(etudiant.id, p.passageId, [photo("2.a=PTS:8")])).rejects.toThrow(/délai/);
+    const vue = await passages.getPassage(etudiant.id, p.passageId);
+    expect(vue.termine).toBe(true);
+    expect((await passages.getRapport(etudiant.id, p.passageId)).note).toBe(3);
   });
 });

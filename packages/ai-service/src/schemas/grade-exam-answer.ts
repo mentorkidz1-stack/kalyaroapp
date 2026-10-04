@@ -10,6 +10,8 @@ export const gradeExamAnswerInputSchema = z.object({
   /** Corrigés VALIDÉS par un humain — plusieurs démarches correctes possibles. */
   corriges: z.array(z.string()).min(1),
   reponseEtudiant: z.string(),
+  /** La réponse est la transcription IA d'une copie manuscrite photographiée. */
+  depuisPhoto: z.boolean().optional(),
 });
 export type GradeExamAnswerInput = z.infer<typeof gradeExamAnswerInputSchema>;
 

@@ -526,6 +526,13 @@ model PassageEpreuve {
   tempsParQuestion     Json?     @map("temps_par_question")
   /// Verrou de correction : une seule correction groupée à la fois pour un passage.
   correctionDemarreeAt DateTime? @map("correction_demarree_at")
+  // ---- Copie papier photographiée ----
+  /// L'étudiant rédige sur papier : il dispose d'un délai après l'heure limite pour photographier.
+  copiePapier          Boolean   @default(false) @map("copie_papier")
+  /// Pages photographiées (clés de stockage R2), dans l'ordre d'envoi.
+  photosCopie          String[]  @default([]) @map("photos_copie")
+  /// Transcription IA de la copie, par clé de question : { [cle]: texte }.
+  transcriptionCopie   Json?     @map("transcription_copie")
 
   tentatives TentativeEleve[]
 
@@ -556,6 +563,9 @@ model TentativeEleve {
   /// Points obtenus / points de la question (épreuves notées sur barème).
   pointsObtenus         Float?             @map("points_obtenus")
   pointsMax             Float?             @map("points_max")
+  /// Photos de copie manuscrite (clés de stockage R2) quand la réponse a été photographiée ;
+  /// reponseDonnee contient alors la transcription IA effectivement notée.
+  photos                String[]           @default([])
   reponseDonnee         String             @map("reponse_donnee")
   correcte              Boolean?
   /// { verdict, explication } — jugement sémantique IA pour la saisie libre

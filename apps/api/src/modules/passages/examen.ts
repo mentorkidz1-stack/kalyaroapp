@@ -10,6 +10,40 @@ export const TEMPS_MAX_PAR_ENREGISTREMENT_S = 120;
 /** Nombre de notions mises en révision immédiate à l'issue d'un examen blanc. */
 export const NB_NOTIONS_PRIORITAIRES = 3;
 
+/** Copie papier : temps laissé après l'heure limite pour photographier les pages (on n'écrit
+ * plus, on photographie — l'examen blanc reste un entraînement personnel). */
+export const DELAI_PHOTOS_MS = 10 * 60_000;
+/** Nombre maximal de pages photographiées pour une copie d'examen blanc. */
+export const MAX_PAGES_COPIE = 8;
+
+/** Fin effective d'un examen blanc : heure limite + marge réseau, ou + délai photo si copie papier. */
+export function finExamen(passage: { dateLimiteAt: Date | null; copiePapier: boolean }): Date | null {
+  if (!passage.dateLimiteAt) return null;
+  return new Date(passage.dateLimiteAt.getTime() + (passage.copiePapier ? DELAI_PHOTOS_MS : DELAI_GRACE_MS));
+}
+
+/** Ajoute de nouvelles transcriptions (nouvelles pages) à celles déjà lues, question par question. */
+export function fusionnerTranscriptions(
+  existantes: Record<string, string>,
+  nouvelles: { cle: string; texte: string }[]
+): Record<string, string> {
+  const resultat = { ...existantes };
+  for (const { cle, texte } of nouvelles) {
+    const t = texte.trim();
+    if (!t) continue;
+    resultat[cle] = resultat[cle] ? `${resultat[cle]}\n${t}` : t;
+  }
+  return resultat;
+}
+
+/** Réponse corrigée pour une question : le texte tapé et/ou ce qui a été lu sur les photos. */
+export function reponseFinale(tapee: string | undefined, transcrite: string | undefined): { texte: string; depuisPhoto: boolean } {
+  const a = (tapee ?? "").trim();
+  const b = (transcrite ?? "").trim();
+  if (a && b) return { texte: `${a}\n\n${b}`, depuisPhoto: true };
+  return { texte: a || b, depuisPhoto: !a && !!b };
+}
+
 export function dateLimitePassage(demarreAt: Date, dureeMinutes: number | null): Date {
   return new Date(demarreAt.getTime() + (dureeMinutes ?? DUREE_EXAMEN_PAR_DEFAUT_MINUTES) * 60_000);
 }

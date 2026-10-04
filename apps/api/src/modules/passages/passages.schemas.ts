@@ -21,6 +21,8 @@ export const enregistrerBrouillonSchema = z.object({
   deltaSecondes: z.number().min(0).max(3600).default(0),
 });
 
+export const copiePapierSchema = z.object({ actif: z.boolean() });
+
 export const rendreExamenSchema = z.object({
   brouillons: z.record(z.string(), z.string().max(10_000)).optional(),
 });

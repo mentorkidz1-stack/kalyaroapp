@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import { AiGenerationError, type LlmProvider } from "./provider.js";
+import { AiGenerationError, type ImageEntree, type LlmProvider } from "./provider.js";
 
 const JSON_INSTRUCTION =
   "\n\nRéponds uniquement avec un JSON valide conforme au format demandé, " +
@@ -74,7 +74,7 @@ function sleep(ms: number) {
  */
 export async function generateStructured<T>(
   provider: LlmProvider,
-  options: { system: string; prompt: string; schema: ZodType<T> }
+  options: { system: string; prompt: string; schema: ZodType<T>; images?: ImageEntree[] }
 ): Promise<T> {
   const system = options.system + JSON_INSTRUCTION;
   let lastError = "";
@@ -87,7 +87,7 @@ export async function generateStructured<T>(
           "Réponds à nouveau, uniquement avec le JSON corrigé.";
 
     try {
-      const raw = await provider.complete(system, prompt);
+      const raw = await provider.complete(system, prompt, options.images);
       const parsed = JSON.parse(reparerLatexDansJson(stripMarkdownFences(raw)));
       return options.schema.parse(parsed);
     } catch (err) {

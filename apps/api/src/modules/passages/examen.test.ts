@@ -6,6 +6,9 @@ import {
   dateLimitePassage,
   deltaTempsValide,
   estExpire,
+  finExamen,
+  fusionnerTranscriptions,
+  reponseFinale,
   notionsPrioritaires,
 } from "./examen.js";
 
@@ -57,6 +60,33 @@ describe("analyserTemps", () => {
       ["3", 27, "rapide"], // 10 min < 13,5 min
       ["4", 0, "non_abordee"],
     ]);
+  });
+});
+
+describe("copie papier photographiée", () => {
+  const limite = new Date("2026-10-20T09:30:00Z");
+
+  it("laisse 10 minutes pour photographier après l'heure limite, 30 s sinon", () => {
+    expect(finExamen({ dateLimiteAt: limite, copiePapier: true })).toEqual(new Date("2026-10-20T09:40:00Z"));
+    expect(finExamen({ dateLimiteAt: limite, copiePapier: false })).toEqual(new Date(limite.getTime() + DELAI_GRACE_MS));
+    expect(finExamen({ dateLimiteAt: null, copiePapier: true })).toBeNull();
+  });
+
+  it("ajoute les pages lues aux transcriptions existantes, sans texte vide", () => {
+    expect(
+      fusionnerTranscriptions({ q1: "π(q) = −q² + 80q − 300" }, [
+        { cle: "q1", texte: "(suite) donc π est un polynôme" },
+        { cle: "q2", texte: "q* = 40" },
+        { cle: "q3", texte: "   " },
+      ])
+    ).toEqual({ q1: "π(q) = −q² + 80q − 300\n(suite) donc π est un polynôme", q2: "q* = 40" });
+  });
+
+  it("la réponse corrigée combine le texte tapé et la photo", () => {
+    expect(reponseFinale("q* = 40", undefined)).toEqual({ texte: "q* = 40", depuisPhoto: false });
+    expect(reponseFinale("", "q* = 40")).toEqual({ texte: "q* = 40", depuisPhoto: true });
+    expect(reponseFinale("début tapé", "suite photographiée")).toEqual({ texte: "début tapé\n\nsuite photographiée", depuisPhoto: true });
+    expect(reponseFinale("  ", undefined)).toEqual({ texte: "", depuisPhoto: false });
   });
 });
 

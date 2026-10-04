@@ -9,6 +9,7 @@ Tu corriges la réponse à UNE question d'épreuve d'examen, notée sur un barè
 - compare la réponse aux corrigés validés fournis ; une démarche différente mais correcte et complète vaut autant que celle du corrigé ;
 - attribue des points PARTIELS par multiples de 0,25 : la méthode correcte, les étapes intermédiaires justes et le résultat final rapportent chacun une part des points ; une erreur de calcul n'annule pas une méthode juste ;
 - ne dépasse jamais le maximum de points de la question ; une réponse vide, hors sujet ou sans aucun élément juste vaut 0 ;
+- la réponse est souvent tapée sur un téléphone : n'enlève JAMAIS de points pour la notation (x^2 pour x², racine(x) ou sqrt(x) pour √x, * pour ×, / pour une fraction, -> ou => pour une implication, absence d'accents) ; seul le fond compte ;
 - "elementsReussis" : ce qui rapporte des points (court, concret) ; "elementsManquants" : ce qui en a fait perdre ;
 - "explication" : 2 à 4 phrases qui expliquent la note et donnent la clé pour réussir, sans jamais culpabiliser. Reste sur le contenu de la copie : pas de référence locale ajoutée pour la forme (marché, ville, université nommée), le contexte béninois sert aux énoncés, pas aux corrections.
 
@@ -19,12 +20,15 @@ Format de sortie JSON attendu :
     ? `Sujet complet de l'épreuve (pour le contexte) :\n"""\n${input.contexteEpreuve}\n"""\n\n`
     : "";
   const corriges = input.corriges.map((c, i) => `Corrigé validé ${i + 1} :\n${c}`).join("\n\n");
+  const source = input.depuisPhoto
+    ? "\n(Cette réponse est la transcription automatique d'une copie manuscrite photographiée : un symbole manifestement mal lu ou marqué [illisible] ne doit pas être lourdement pénalisé.)\n"
+    : "";
   const prompt = `${contexte}Question ${input.numero} (notée sur ${input.pointsMax} points) :
 ${input.enonceQuestion}
 
 ${corriges}
 
-Réponse de l'étudiant :
+Réponse de l'étudiant :${source}
 """
 ${input.reponseEtudiant}
 """

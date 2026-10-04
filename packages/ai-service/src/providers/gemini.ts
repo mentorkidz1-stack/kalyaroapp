@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { LlmProvider } from "../provider.js";
+import type { ImageEntree, LlmProvider } from "../provider.js";
 
 let client: GoogleGenAI | undefined;
 
@@ -15,11 +15,19 @@ function getClient(): GoogleGenAI {
 }
 
 export const geminiProvider: LlmProvider = {
-  async complete(system: string, prompt: string): Promise<string> {
+  async complete(system: string, prompt: string, images: ImageEntree[] = []): Promise<string> {
     const model = process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
     const response = await getClient().models.generateContent({
       model,
-      contents: prompt,
+      contents:
+        images.length === 0
+          ? prompt
+          : [
+              {
+                role: "user",
+                parts: [{ text: prompt }, ...images.map((i) => ({ inlineData: { mimeType: i.mimeType, data: i.base64 } }))],
+              },
+            ],
       config: { systemInstruction: system },
     });
     const text = response.text;
