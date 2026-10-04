@@ -10,6 +10,7 @@ import {
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
 import { getAccessibleMatiereIds } from "../../lib/matiere-access.js";
+import { corrigerReponseFigure, libelleReponseDonnee, reponseAttendueSchema } from "@kalyaro/shared";
 import { recordDailyActivity, projectCurrentStreak } from "../../lib/streak.js";
 import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload } from "./attempt-token.js";
 import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
@@ -132,7 +133,9 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
   if (!selection) return null;
 
   const chosen = selection.question;
-  const choix = shuffleChoix(chosen.choix as string[]);
+  const surFigure = chosen.typeReponse !== "CHOIX";
+  const choix = surFigure ? [] : shuffleChoix(chosen.choix as string[]);
+  const attendue = surFigure ? reponseAttendueSchema.safeParse(chosen.reponseAttendue) : null;
   const attemptToken = signQcmAttemptToken({
     eleveId,
     notionId,
@@ -140,6 +143,8 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
     bonneReponse: chosen.bonneReponse,
     enonce: chosen.enonce,
     choix,
+    // La réponse attendue voyage chiffrée dans le jeton, jamais en clair vers l'étudiant.
+    ...(surFigure ? { typeReponse: chosen.typeReponse, reponseAttendue: chosen.reponseAttendue } : {}),
   });
   return {
     enonce: chosen.enonce,
@@ -147,6 +152,14 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
     attemptToken,
     estVariante: selection.motif === "variante",
     figure: chosen.figure ?? null,
+    typeReponse: chosen.typeReponse,
+    // Aides à la saisie seulement (aimant de grille, unité) — pas la position attendue.
+    interaction:
+      attendue?.success && attendue.data.type === "PLACER_POINT"
+        ? { pasGrille: attendue.data.pasGrille ?? null }
+        : attendue?.success && attendue.data.type === "LIRE_VALEUR"
+          ? { unite: attendue.data.unite ?? null }
+          : null,
   };
 };
 
@@ -207,7 +220,11 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     throw err;
   }
 
-  const correcte = reponseDonnee === payload.bonneReponse;
+  const attendueFigure =
+    payload.typeReponse && payload.typeReponse !== "CHOIX" ? reponseAttendueSchema.safeParse(payload.reponseAttendue) : null;
+  const correcte = attendueFigure
+    ? attendueFigure.success && corrigerReponseFigure(attendueFigure.data, reponseDonnee)
+    : reponseDonnee === payload.bonneReponse;
 
   const previousAttemptsCount = await prisma.tentativeEleve.count({
     where: { eleveId, questionQcmId: payload.questionQcmId },
@@ -301,11 +318,16 @@ function generateIndiceInBackground(
     // On utilise l'énoncé/les choix embarqués dans le jeton : c'est exactement ce que
     // l'étudiant a vu à l'écran, choix remélangés compris.
     const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId } });
+    const surFigure = payload.typeReponse && payload.typeReponse !== "CHOIX" ? payload.typeReponse : null;
+    const question = surFigure
+      ? await prisma.questionQcm.findUnique({ where: { id: payload.questionQcmId }, select: { figure: true } })
+      : null;
     const explanation = await explainQcmAnswer({
       notionNom: notion.nom,
       question: payload.enonce,
       choix: payload.choix,
-      reponseDonnee,
+      reponseDonnee: surFigure ? libelleReponseDonnee(surFigure, reponseDonnee) : reponseDonnee,
+      ...(surFigure ? { surFigure: { consigne: surFigure, figure: question?.figure ?? null } } : {}),
     });
     await prisma.tentativeEleve.update({
       where: { id: tentativeId },

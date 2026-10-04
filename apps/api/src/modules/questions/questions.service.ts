@@ -1,4 +1,5 @@
-import type { Difficulte, StatutQuestion } from "@prisma/client";
+import type { Difficulte, StatutQuestion, TypeReponseQcm } from "@prisma/client";
+import { libelleReponseAttendue, verifierQuestionSurFigure, type ReponseAttendue } from "@kalyaro/shared";
 import { generateQcm, generateQcmVariants, generateSaisieLibre } from "@kalyaro/ai-service";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
@@ -37,8 +38,10 @@ export const createQcm = async (
   createdById: string,
   data: {
     enonce: string;
+    typeReponse: TypeReponseQcm;
     choix: string[];
     bonneReponse: string;
+    reponseAttendue?: ReponseAttendue;
     difficulte: Difficulte;
     notionIds: string[];
     figure?: unknown;
@@ -54,6 +57,8 @@ export const createQcm = async (
       enonce: data.enonce,
       choix: data.choix,
       bonneReponse: data.bonneReponse,
+      typeReponse: data.typeReponse,
+      reponseAttendue: data.reponseAttendue ?? undefined,
       difficulte: data.difficulte,
       figure: figurePourPrisma(data.figure ?? undefined),
       source: "MANUEL",
@@ -75,13 +80,29 @@ export const updateQcm = async (
     statut?: StatutQuestion;
     notionIds?: string[];
     figure?: unknown;
+    reponseAttendue?: ReponseAttendue;
   }
 ) => {
   const existing = await prisma.questionQcm.findUnique({ where: { id } });
   if (!existing) throw new AppError("Question QCM introuvable", 404);
 
-  const { notionIds, figure, ...autres } = data;
-  const rest = { ...autres, ...(figure !== undefined ? { figure: figurePourPrisma(figure) } : {}) };
+  const { notionIds, figure, reponseAttendue, ...autres } = data;
+  // Question sur figure : la combinaison finale (figure + réponse attendue) doit rester cohérente.
+  if (existing.typeReponse !== "CHOIX" && (figure !== undefined || reponseAttendue !== undefined)) {
+    const erreurs = verifierQuestionSurFigure(
+      existing.typeReponse,
+      figure !== undefined ? figure : existing.figure,
+      reponseAttendue ?? existing.reponseAttendue
+    );
+    if (erreurs.length) throw new AppError(erreurs.join(" ; "), 400);
+  }
+  const rest = {
+    ...autres,
+    ...(figure !== undefined ? { figure: figurePourPrisma(figure) } : {}),
+    ...(reponseAttendue && existing.typeReponse !== "CHOIX"
+      ? { reponseAttendue, bonneReponse: libelleReponseAttendue(reponseAttendue) }
+      : {}),
+  };
   return prisma.$transaction(async (tx) => {
     if (notionIds) {
       const notions = await tx.notion.findMany({
@@ -178,6 +199,9 @@ export const generateVariantesForQcm = async (questionId: string, createdById: s
   if (question.statut !== "PUBLIE") {
     throw new AppError("Seule une question publiée peut servir de modèle à des variantes", 400);
   }
+  if (question.typeReponse !== "CHOIX") {
+    throw new AppError("Les variantes IA ne sont disponibles que pour les QCM à choix (pas les réponses sur figure)", 400);
+  }
 
   const racineId = question.varianteDeId ?? question.id;
   const existantes = await prisma.questionQcm.count({ where: { varianteDeId: racineId } });
@@ -229,7 +253,7 @@ export const generateVariantesForChapitre = async (chapitreId: string, createdBy
   if (!chapitre) throw new AppError("Chapitre introuvable", 404);
 
   const racines = await prisma.questionQcm.findMany({
-    where: { chapitreId, statut: "PUBLIE", varianteDeId: null },
+    where: { chapitreId, statut: "PUBLIE", varianteDeId: null, typeReponse: "CHOIX" },
     include: { _count: { select: { variantes: true } } },
     orderBy: { createdAt: "asc" },
   });

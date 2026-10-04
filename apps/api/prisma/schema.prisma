@@ -52,6 +52,14 @@ enum StatutQuestion {
   PUBLIE
 }
 
+/// Manière de répondre à un QCM : choisir parmi des choix, ou répondre sur la figure
+/// (chantier 2.4) — placer un point dans un repère, lire une valeur sur une courbe.
+enum TypeReponseQcm {
+  CHOIX
+  PLACER_POINT
+  LIRE_VALEUR
+}
+
 enum Difficulte {
   FACILE
   MOYEN
@@ -330,6 +338,10 @@ model QuestionQcm {
   bonneReponse String         @map("bonne_reponse")
   /// Figure structurée dessinée par l'application (voir packages/shared/src/figures).
   figure       Json?
+  typeReponse  TypeReponseQcm @default(CHOIX) @map("type_reponse")
+  /// Réponse sur figure (PLACER_POINT, LIRE_VALEUR) : position ou valeur attendue + tolérance.
+  /// Pour ces types, `choix` est vide et `bonneReponse` contient la réponse lisible.
+  reponseAttendue Json?       @map("reponse_attendue")
   source       SourceQuestion
   statut       StatutQuestion @default(BROUILLON)
   difficulte   Difficulte     @default(MOYEN)

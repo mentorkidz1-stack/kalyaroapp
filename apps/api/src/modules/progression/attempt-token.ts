@@ -18,6 +18,9 @@ export interface QcmAttemptTokenPayload {
   bonneReponse: string;
   enonce: string;
   choix: string[];
+  /** Réponse sur figure : type et réponse attendue (sinon QCM à choix classique). */
+  typeReponse?: "CHOIX" | "PLACER_POINT" | "LIRE_VALEUR";
+  reponseAttendue?: unknown;
 }
 
 const TOKEN_TTL_MS = 15 * 60 * 1000;
