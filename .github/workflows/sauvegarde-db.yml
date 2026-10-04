@@ -1,0 +1,59 @@
+# Sauvegarde quotidienne de la base PostgreSQL vers Cloudflare R2 — voir docs/SAUVEGARDES.md.
+# Inactif tant que les secrets ne sont pas configurés (le job se termine avec un avertissement).
+name: Sauvegarde base de données
+
+on:
+  schedule:
+    - cron: "30 1 * * *" # 2 h 30 heure du Bénin (UTC+1), heure creuse
+  workflow_dispatch:
+    inputs:
+      dossier:
+        description: "Dossier dans le bucket (ex. avant-migration)"
+        required: false
+        default: manuel
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sauvegarde-db
+  cancel-in-progress: false
+
+jobs:
+  sauvegarde:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+      R2_BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET || 'kalyaro-sauvegardes' }}
+      # Doit être ≥ à la version majeure du serveur PostgreSQL (pg_dump refuse sinon).
+      PG_CLIENT_VERSION: ${{ vars.PG_CLIENT_VERSION || '17' }}
+      BACKUP_PREFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.dossier || 'quotidien' }}
+    steps:
+      - name: Vérifier la configuration
+        id: config
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$R2_ENDPOINT" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::warning::Sauvegarde non configurée (secrets manquants) — voir docs/SAUVEGARDES.md"
+            echo "actif=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "actif=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.actif == 'true'
+
+      - name: Installer le client PostgreSQL ${{ env.PG_CLIENT_VERSION }}
+        if: steps.config.outputs.actif == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq "postgresql-client-${PG_CLIENT_VERSION}"
+
+      - name: Sauvegarder et envoyer vers R2
+        if: steps.config.outputs.actif == 'true'
+        run: bash scripts/sauvegarde-db.sh

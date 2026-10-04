@@ -1,8 +1,32 @@
+# Blueprint Render de Kalyaro — voir README.md (section Déploiement) et docs/SAUVEGARDES.md.
+#
+# Les secrets sont en `sync: false` : Render les demande à la création et ne les écrase
+# jamais lors d'une synchronisation du Blueprint. Ne jamais y mettre de valeur en clair.
 services:
   - type: web
     name: kalyaro-api
     runtime: node
+    # ── OFFRE : À CHOISIR AVANT LE LANCEMENT ──────────────────────────────────────────
+    # Les Blueprints Render n'acceptent pas de variable pour `plan` : changer cette ligne
+    # (ou l'offre dans le tableau de bord), puis synchroniser.
+    #   free     : mise en veille après ~15 min d'inactivité, réveil de 30 à 60 s → à proscrire
+    #              en production (premier étudiant de la journée bloqué près d'une minute).
+    #   starter  : plus petite offre SANS mise en veille — suffisant pour le lancement.
+    #   standard : plus de mémoire/CPU, si la génération IA ou l'extraction PDF saturent.
+    # Avec une offre payante, déplacer `prisma migrate deploy` de startCommand vers
+    # `preDeployCommand` (réservé aux offres payantes) : une migration en échec annule alors
+    # le déploiement au lieu de faire redémarrer le service en boucle.
     plan: free
+    # ── RÉGION ────────────────────────────────────────────────────────────────────────
+    # Frankfurt serait la plus proche de l'Afrique de l'Ouest, MAIS l'API Gemini (offre
+    # gratuite) refuse les appels venant de Frankfurt (« User location is not supported »,
+    # constaté en production, commit fbc926e). Options documentées dans README.md :
+    #   - rester en oregon (actuel) ;
+    #   - virginia : sensiblement plus proche du Bénin qu'oregon et accepté par Gemini ;
+    #   - frankfurt : seulement avec AI_PROVIDER=anthropic ou une offre Gemini payante.
+    # La base PostgreSQL doit être dans la MÊME région que l'API (des dizaines de requêtes
+    # SQL par page). La région d'un service Render ne se modifie pas : changer de région =
+    # créer un nouveau service (et migrer la base).
     region: oregon
     buildCommand: npm install && npx prisma generate --schema apps/api/prisma/schema.prisma && npm run build --workspace packages/shared && npm run build --workspace packages/ai-service && npm run build --workspace apps/api
     startCommand: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && npm run start --workspace apps/api
@@ -10,6 +34,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20.18.0
+      # Pas de NODE_ENV=production ici : Render l'appliquerait aussi au build, et `npm install`
+      # sauterait les devDependencies (typescript, prisma) nécessaires à la compilation.
       - key: PORT
         value: 4000
       - key: DATABASE_URL
@@ -25,7 +51,7 @@ services:
       - key: GEMINI_MODEL
         value: gemini-flash-lite-latest
       - key: ANTHROPIC_API_KEY
-        value: ""
+        sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-5
       - key: R2_ENDPOINT
@@ -40,6 +66,7 @@ services:
   - type: web
     name: kalyaro-web
     runtime: static
+    # Site statique : servi par le CDN de Render (pas de région, pas de mise en veille).
     buildCommand: npm install && npm run build --workspace packages/shared && npm run build --workspace apps/web
     staticPublishPath: apps/web/dist
     envVars:
