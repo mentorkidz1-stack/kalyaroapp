@@ -1,12 +1,27 @@
 import type { ReactNode } from "react";
 
-type BadgeVariant = "ai" | "manual" | "ok" | "warn";
+export type BadgeVariant =
+  | "ai"
+  | "manual"
+  | "ok"
+  | "warn"
+  // Niveaux de maîtrise d'une notion, du plus fragile au plus durable.
+  | "neutral"
+  | "fragile"
+  | "acquis"
+  | "consolide"
+  | "durable";
 
 const variantClasses: Record<BadgeVariant, string> = {
   ai: "bg-primary-tint text-primary-deep",
   manual: "bg-accent-tint text-[#8A5A0E]",
   ok: "bg-primary-tint text-primary-deep",
   warn: "bg-alert-tint text-alert",
+  neutral: "bg-line text-ink-soft",
+  fragile: "bg-accent-tint text-[#8A5A0E]",
+  acquis: "bg-primary-tint text-primary-deep",
+  consolide: "bg-primary text-white",
+  durable: "bg-primary-deep text-white",
 };
 
 export function Badge({ variant, children }: { variant: BadgeVariant; children: ReactNode }) {

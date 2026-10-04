@@ -13,8 +13,29 @@ import {
   EmptyState,
   ErrorState,
   MasteryCelebration,
+  niveauAMonte,
+  type NiveauMaitrise,
 } from "../../design-system";
 import { useQcmNext, useSubmitQcm, useTentativeIndice, type RepondreResult } from "./useQcm";
+
+const celebrations: Partial<Record<NiveauMaitrise, { titre: string; sousTitre: string; message: string }>> = {
+  ACQUIS_DU_JOUR: {
+    titre: "Notion acquise aujourd'hui !",
+    sousTitre: "Acquis du jour",
+    message:
+      "3 bonnes réponses d'affilée. Elle reviendra demain dans tes révisions : c'est en t'en souvenant après une nuit qu'elle se consolidera. Tu peux aussi t'entraîner en saisie libre.",
+  },
+  CONSOLIDE: {
+    titre: "Notion consolidée !",
+    sousTitre: "Consolidé",
+    message: "Tu t'en souviens encore après au moins un jour. Elle reviendra à intervalle plus long pour devenir durable.",
+  },
+  DURABLE: {
+    titre: "Notion durable !",
+    sousTitre: "Durable",
+    message: "Tu la maîtrises encore après plus d'une semaine : elle est solidement ancrée pour ton examen.",
+  },
+};
 
 interface QcmLocationState {
   returnToEpreuve?: { epreuveId: string; enonce: string };
@@ -88,15 +109,15 @@ export function QcmSessionPage() {
     setIsTransitioning(false);
   }
 
-  if (result?.statutNotion === "MAITRISE") {
+  const celebration =
+    result && niveauAMonte(result.statutPrecedent, result.statutNotion) ? celebrations[result.statutNotion] : undefined;
+
+  if (celebration) {
     return (
       <div className="min-h-screen bg-bg">
-        <AppHeader title="Bravo !" subtitle="Notion maîtrisée" onBack={() => navigate(`/parcours/${chapitreId}`)} />
+        <AppHeader title="Bravo !" subtitle={celebration.sousTitre} onBack={() => navigate(`/parcours/${chapitreId}`)} />
         <div className="max-w-lg mx-auto p-5">
-          <MasteryCelebration
-            title="Notion maîtrisée !"
-            message="Tu as répondu juste 3 fois d'affilée — tu peux maintenant t'entraîner en saisie libre sur cette notion, ou continuer ton parcours."
-          >
+          <MasteryCelebration title={celebration.titre} message={celebration.message}>
             <div className="flex flex-col gap-2">
               {returnToEpreuve && (
                 <Button

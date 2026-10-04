@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
+import type { NiveauMaitrise } from "../../design-system";
 
 export interface NextQcm {
   enonce: string;
@@ -21,7 +22,8 @@ export interface QuestionMetacognitive {
 export interface RepondreResult {
   tentativeId: string;
   correcte: boolean;
-  statutNotion: "NON_VU" | "FRAGILE" | "MAITRISE";
+  statutNotion: NiveauMaitrise;
+  statutPrecedent: NiveauMaitrise;
   ficheResume: FicheResume | null;
   questionMetacognitive: QuestionMetacognitive | null;
   indice: string | null;

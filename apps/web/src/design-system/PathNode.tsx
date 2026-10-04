@@ -1,20 +1,31 @@
-export type NodeState = "done" | "current" | "locked";
+import type { ReactNode } from "react";
+
+/** current : à travailler · acquired : acquis du jour · done : consolidé · durable : durable. */
+export type NodeState = "durable" | "done" | "acquired" | "current" | "locked";
 
 interface PathNodeProps {
   state: NodeState;
   label: string;
-  sub: string;
+  sub: ReactNode;
   side: "left" | "right";
   onClick?: () => void;
 }
 
 const bubbleClasses: Record<NodeState, string> = {
+  durable: "bg-primary-deep text-white",
   done: "bg-primary text-white",
+  acquired: "bg-primary-tint text-primary-deep",
   current: "bg-accent text-primary-deep bubble-pulse",
   locked: "bg-[#EDEFE8] text-[#A9B0A2]",
 };
 
-const bubbleContent: Record<NodeState, string> = { done: "✓", current: "▶", locked: "🔒" };
+const bubbleContent: Record<NodeState, string> = {
+  durable: "★",
+  done: "✓",
+  acquired: "✓",
+  current: "▶",
+  locked: "🔒",
+};
 
 export function PathNode({ state, label, sub, side, onClick }: PathNodeProps) {
   const flexDir = side === "left" ? "flex-row" : "flex-row-reverse text-right";
@@ -32,7 +43,7 @@ export function PathNode({ state, label, sub, side, onClick }: PathNodeProps) {
       </span>
       <span>
         <div className="text-[13px] font-bold text-ink">{label}</div>
-        <div className="text-[11px] font-mono text-ink-soft">{sub}</div>
+        <div className="text-[11px] font-mono text-ink-soft mt-0.5">{sub}</div>
       </span>
     </button>
   );

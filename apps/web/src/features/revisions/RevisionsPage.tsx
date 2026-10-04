@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, EmptyState, ErrorState, KpiTile, LoadingState } from "../../design-system";
+import { Button, Card, EmptyState, ErrorState, KpiTile, LoadingState, MasteryBadge } from "../../design-system";
 import { useStreak } from "../streak/useStreak";
 import { libelleRevisions, useRevisionsDues } from "./useRevisions";
 
@@ -51,11 +51,9 @@ export function RevisionsPage() {
               </div>
               <ul className="space-y-1.5">
                 {data.notions.map((notion) => (
-                  <li key={notion.notionId} className="flex justify-between gap-3 text-sm">
+                  <li key={notion.notionId} className="flex justify-between items-center gap-3 text-sm">
                     <span className="text-ink">{notion.nom}</span>
-                    <span className="font-mono text-[11px] text-ink-soft shrink-0">
-                      {notion.statut === "FRAGILE" ? "À CONSOLIDER" : "À ENTRETENIR"}
-                    </span>
+                    <MasteryBadge statut={notion.statut} />
                   </li>
                 ))}
               </ul>

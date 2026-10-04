@@ -12,7 +12,9 @@ import {
   ErrorState,
   FeedbackBlock,
   LoadingState,
+  MasteryBadge,
   MasteryCelebration,
+  niveauAMonte,
 } from "../../design-system";
 import { useSubmitQcm, useTentativeIndice, type NextQcm, type RepondreResult } from "../qcm/useQcm";
 import { REVISIONS_DUES_KEY, type RevisionsDues } from "./useRevisions";
@@ -185,6 +187,11 @@ export function RevisionSessionPage() {
                         ? "Pas tout à fait — cette notion reviendra demain."
                         : "Pas tout à fait… un instant, on prépare une explication."}
                 </FeedbackBlock>
+                {niveauAMonte(result.statutPrecedent, result.statutNotion) && (
+                  <p className="mt-2 text-sm text-ink flex items-center gap-2">
+                    Niveau atteint : <MasteryBadge statut={result.statutNotion} />
+                  </p>
+                )}
               </div>
             )}
 

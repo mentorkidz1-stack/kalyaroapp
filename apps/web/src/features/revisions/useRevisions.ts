@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
+import type { NiveauMaitrise } from "../../design-system";
 
 export interface NotionDue {
   notionId: string;
   nom: string;
   chapitreId: string;
-  statut: "FRAGILE" | "MAITRISE";
+  statut: Exclude<NiveauMaitrise, "NON_VU">;
   nbEchecsConsecutifs: number;
   prochaineRevisionAt: string;
 }

@@ -2,21 +2,25 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { PathNode, Thread, LoadingState, EmptyState, ErrorState, type NodeState } from "../../design-system";
+import {
+  PathNode,
+  Thread,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  MasteryBadge,
+  niveauxMaitrise,
+  type NiveauMaitrise,
+  type NodeState,
+} from "../../design-system";
 import { useStreak } from "../streak/useStreak";
 
 interface NotionProgression {
   notionId: string;
   nom: string;
-  statut: "NON_VU" | "FRAGILE" | "MAITRISE";
+  statut: NiveauMaitrise;
   verrouille: boolean;
 }
-
-const statutLabel: Record<NotionProgression["statut"], string> = {
-  MAITRISE: "MAÎTRISÉ",
-  FRAGILE: "EN COURS",
-  NON_VU: "À DÉCOUVRIR",
-};
 
 export function ParcoursPage() {
   const { chapitreId } = useParams<{ chapitreId: string }>();
@@ -44,8 +48,8 @@ export function ParcoursPage() {
         )}
         <div className="flex flex-col items-center gap-1">
           {data?.map((notion, index) => {
-            const state: NodeState = notion.verrouille ? "locked" : notion.statut === "MAITRISE" ? "done" : "current";
-            const sub = notion.verrouille ? "VERROUILLÉ" : statutLabel[notion.statut];
+            const state: NodeState = notion.verrouille ? "locked" : niveauxMaitrise[notion.statut].noeud;
+            const sub = notion.verrouille ? "VERROUILLÉ" : <MasteryBadge statut={notion.statut} />;
             return (
               <div key={notion.notionId} className="w-full">
                 {index > 0 && <Thread />}
