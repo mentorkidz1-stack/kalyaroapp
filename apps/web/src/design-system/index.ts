@@ -19,3 +19,4 @@ export * from "./MasteryCelebration";
 export * from "./MasteryBadge";
 export * from "./MathText";
 export * from "./ClavierMaths";
+export * from "./figures/FigureRenderer";

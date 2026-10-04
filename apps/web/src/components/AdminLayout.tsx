@@ -12,6 +12,7 @@ const navItems = [
   { to: "/admin/copies", label: "🖊️ Correction des copies" },
   { to: "/admin/validation", label: "✅ File de validation IA" },
   { to: "/admin/demo-maths", label: "∑ Démo affichage maths" },
+  { to: "/admin/demo-figures", label: "📐 Démo figures" },
 ];
 
 export function AdminLayout() {
