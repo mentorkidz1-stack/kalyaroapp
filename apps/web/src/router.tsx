@@ -6,6 +6,8 @@ import { MesCoursPage } from "./features/cours/MesCoursPage";
 import { ParcoursPage } from "./features/parcours/ParcoursPage";
 import { QcmSessionPage } from "./features/qcm/QcmSessionPage";
 import { SaisieLibrePage } from "./features/saisie-libre/SaisieLibrePage";
+import { RevisionsPage } from "./features/revisions/RevisionsPage";
+import { RevisionSessionPage } from "./features/revisions/RevisionSessionPage";
 import { EpreuvesListPage } from "./features/epreuves/EpreuvesListPage";
 import { EpreuveSessionPage } from "./features/epreuves/EpreuveSessionPage";
 import { EvaluationsListPage } from "./features/evaluations/EvaluationsListPage";
@@ -48,10 +50,12 @@ export const router = createBrowserRouter([
         children: [
           { path: "cours", element: <MesCoursPage /> },
           { path: "parcours/:chapitreId", element: <ParcoursPage /> },
+          { path: "revisions", element: <RevisionsPage /> },
           { path: "epreuves", element: <EpreuvesListPage /> },
           { path: "evaluations", element: <EvaluationsListPage /> },
         ],
       },
+      { path: "revisions/seance", element: <RevisionSessionPage /> },
       { path: "parcours/:chapitreId/qcm/:notionId", element: <QcmSessionPage /> },
       { path: "parcours/:chapitreId/saisie-libre/:notionId", element: <SaisieLibrePage /> },
       { path: "epreuves/passage/:epreuveId", element: <EpreuveSessionPage /> },

@@ -4,6 +4,7 @@ import { api } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
 import { Card, LoadingState, EmptyState, ErrorState } from "../../design-system";
 import { useStreak } from "../streak/useStreak";
+import { libelleRevisions, useRevisionsDues } from "../revisions/useRevisions";
 
 interface Chapitre {
   id: string;
@@ -23,11 +24,26 @@ export function MesCoursPage() {
     queryFn: () => api.get<Cours[]>("/api/eleve/mes-cours"),
   });
   const { data: streakData } = useStreak();
+  const { data: revisions } = useRevisionsDues();
 
   return (
     <div className="min-h-screen bg-bg">
       <AppHeader title="Mes cours" subtitle="Kalyaro" streak={streakData?.streakCount} />
       <div className="max-w-lg mx-auto p-5">
+        {revisions && revisions.nbQuestions > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate("/revisions")}
+            className="block w-full text-left mb-4 bg-primary-tint border-2 border-primary rounded p-4 transition-colors hover:bg-primary hover:text-white group"
+          >
+            <div className="font-display font-bold text-base text-ink group-hover:text-white">
+              🔁 {libelleRevisions(revisions.nbQuestions)}
+            </div>
+            <div className="text-sm text-ink-soft group-hover:text-white/80">
+              Environ {revisions.dureeEstimeeMinutes} min pour consolider ce que tu as appris →
+            </div>
+          </button>
+        )}
         {isLoading && <LoadingState label="Chargement de tes cours…" />}
         {!isLoading && error && (
           <ErrorState message="Impossible de charger tes cours." onRetry={() => refetch()} />
