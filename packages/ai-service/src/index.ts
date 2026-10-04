@@ -4,7 +4,7 @@ export * from "./structured.js";
 
 export * from "./schemas/generate-qcm.js";
 export * from "./schemas/generate-saisie-libre.js";
-export * from "./schemas/reformulate-question.js";
+export * from "./schemas/generate-qcm-variants.js";
 export * from "./schemas/generate-summary-sheet.js";
 export * from "./schemas/evaluate-free-answer.js";
 export * from "./schemas/diagnose-prerequisite.js";
@@ -17,7 +17,7 @@ export * from "./schemas/generate-evaluation-feedback.js";
 
 export * from "./functions/generate-qcm.js";
 export * from "./functions/generate-saisie-libre.js";
-export * from "./functions/reformulate-question.js";
+export * from "./functions/generate-qcm-variants.js";
 export * from "./functions/generate-summary-sheet.js";
 export * from "./functions/evaluate-free-answer.js";
 export * from "./functions/diagnose-prerequisite.js";

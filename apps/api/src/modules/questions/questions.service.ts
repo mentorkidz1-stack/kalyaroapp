@@ -1,5 +1,5 @@
 import type { Difficulte, StatutQuestion } from "@prisma/client";
-import { generateQcm, generateSaisieLibre } from "@kalyaro/ai-service";
+import { generateQcm, generateQcmVariants, generateSaisieLibre } from "@kalyaro/ai-service";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
 
@@ -15,7 +15,7 @@ async function assertNotionsBelongToChapitre(chapitreId: string, notionIds: stri
 export const listQcmByChapitre = (chapitreId: string) =>
   prisma.questionQcm.findMany({
     where: { chapitreId },
-    include: { notions: { include: { notion: true } } },
+    include: { notions: { include: { notion: true } }, _count: { select: { variantes: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -23,7 +23,11 @@ export const listQcmByChapitre = (chapitreId: string) =>
 export const listQcmAValider = () =>
   prisma.questionQcm.findMany({
     where: { statut: "A_VALIDER" },
-    include: { notions: { include: { notion: true } }, chapitre: true },
+    include: {
+      notions: { include: { notion: true } },
+      chapitre: true,
+      varianteDe: { select: { id: true, enonce: true, choix: true, bonneReponse: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -148,6 +152,100 @@ export const generateQcmForChapitre = async (
     );
   }
   return created;
+};
+
+// ---- Variantes de QCM (chantier 1.3) ----
+
+const MAX_VARIANTES_PAR_QUESTION = 10;
+
+/**
+ * Génère par IA des variantes d'une question publiée (autres valeurs, même méthode). Elles
+ * sont créées en A_VALIDER : un humain vérifie le corrigé avant qu'un étudiant ne les voie.
+ * Une variante pointe toujours vers la question racine, même si on part d'une variante.
+ */
+export const generateVariantesForQcm = async (questionId: string, createdById: string, nombre: number) => {
+  const question = await prisma.questionQcm.findUnique({
+    where: { id: questionId },
+    include: { notions: { include: { notion: true } } },
+  });
+  if (!question) throw new AppError("Question QCM introuvable", 404);
+  if (question.statut !== "PUBLIE") {
+    throw new AppError("Seule une question publiée peut servir de modèle à des variantes", 400);
+  }
+
+  const racineId = question.varianteDeId ?? question.id;
+  const existantes = await prisma.questionQcm.count({ where: { varianteDeId: racineId } });
+  const aGenerer = Math.min(nombre, MAX_VARIANTES_PAR_QUESTION - existantes);
+  if (aGenerer <= 0) {
+    throw new AppError(`Cette question a déjà ${existantes} variantes (maximum ${MAX_VARIANTES_PAR_QUESTION})`, 400);
+  }
+
+  const { variantes } = await generateQcmVariants({
+    notionNom: question.notions.map((n) => n.notion.nom).join(", ") || "notion du chapitre",
+    enonceOriginal: question.enonce,
+    choixOriginal: question.choix as string[],
+    bonneReponseOriginal: question.bonneReponse,
+    nombreVariantes: aGenerer,
+  });
+
+  const created = [];
+  for (const v of variantes.slice(0, aGenerer)) {
+    created.push(
+      await prisma.questionQcm.create({
+        data: {
+          chapitreId: question.chapitreId,
+          enonce: v.enonce,
+          choix: v.choix,
+          bonneReponse: v.bonneReponse,
+          difficulte: question.difficulte,
+          source: "IA",
+          statut: "A_VALIDER",
+          createdById,
+          varianteDeId: racineId,
+          notions: { create: question.notions.map((n) => ({ notionId: n.notionId })) },
+        },
+        include: { notions: { include: { notion: true } } },
+      })
+    );
+  }
+  return created;
+};
+
+/**
+ * Variantes en lot pour un chapitre : complète chaque question racine publiée jusqu'à
+ * `nombre` variantes (publiées ou en attente). Les appels IA sont faits un par un (quotas
+ * du tier gratuit) ; un échec sur une question n'arrête pas le lot.
+ */
+export const generateVariantesForChapitre = async (chapitreId: string, createdById: string, nombre: number) => {
+  const chapitre = await prisma.chapitre.findUnique({ where: { id: chapitreId } });
+  if (!chapitre) throw new AppError("Chapitre introuvable", 404);
+
+  const racines = await prisma.questionQcm.findMany({
+    where: { chapitreId, statut: "PUBLIE", varianteDeId: null },
+    include: { _count: { select: { variantes: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  let variantesCreees = 0;
+  let questionsCompletes = 0;
+  const echecs: { questionId: string; enonce: string; erreur: string }[] = [];
+  for (const racine of racines) {
+    const manquantes = nombre - racine._count.variantes;
+    if (manquantes <= 0) {
+      questionsCompletes++;
+      continue;
+    }
+    try {
+      variantesCreees += (await generateVariantesForQcm(racine.id, createdById, manquantes)).length;
+    } catch (err) {
+      echecs.push({
+        questionId: racine.id,
+        enonce: racine.enonce,
+        erreur: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { questionsTraitees: racines.length, questionsCompletes, variantesCreees, echecs };
 };
 
 // ---- Saisie libre ----

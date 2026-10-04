@@ -32,6 +32,10 @@ export const generateQcmIaSchema = z.object({
   nombreQuestions: z.number().int().min(1).max(20).default(5),
 });
 
+export const generateVariantesSchema = z.object({
+  nombre: z.number().int().min(1).max(5).default(3),
+});
+
 export const createSaisieLibreSchema = z.object({
   enonce: z.string().min(1),
   reponseReference: z.string().min(1),

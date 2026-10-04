@@ -326,11 +326,19 @@ model QuestionQcm {
   createdById  String         @map("created_by")
   createdBy    User           @relation("QuestionQcmCreatedBy", fields: [createdById], references: [id])
   createdAt    DateTime       @default(now()) @map("created_at")
+  /// Variante d'une question d'origine (mêmes notion et méthode, autres valeurs), générée
+  /// à l'avance et validée comme toute question : servie après un échec à la place d'une
+  /// reformulation IA en direct. Pointe toujours vers la question racine, jamais vers une
+  /// autre variante.
+  varianteDeId String?        @map("variante_de_id")
+  varianteDe   QuestionQcm?   @relation("VariantesQcm", fields: [varianteDeId], references: [id], onDelete: SetNull)
+  variantes    QuestionQcm[]  @relation("VariantesQcm")
 
   notions        QuestionQcmNotion[]
   metacognitives QuestionMetacognitive[]
   tentatives     TentativeEleve[]
 
+  @@index([varianteDeId])
   @@map("questions_qcm")
 }
 

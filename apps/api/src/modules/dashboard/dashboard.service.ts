@@ -1,5 +1,30 @@
 import { prisma } from "../../db/prisma.js";
 
+/** En dessous, un étudiant qui rate une question risque de retomber sur la même. */
+export const MIN_QUESTIONS_PUBLIEES_PAR_NOTION = 3;
+
+/** Notions qui manquent de questions publiées (variantes comprises), les plus pauvres d'abord. */
+async function getNotionsAQuestionsInsuffisantes() {
+  const notions = await prisma.notion.findMany({
+    select: {
+      id: true,
+      nom: true,
+      chapitre: { select: { id: true, titre: true } },
+      _count: { select: { questionsQcm: { where: { questionQcm: { statut: "PUBLIE" } } } } },
+    },
+  });
+  return notions
+    .filter((n) => n._count.questionsQcm < MIN_QUESTIONS_PUBLIEES_PAR_NOTION)
+    .sort((a, b) => a._count.questionsQcm - b._count.questionsQcm || a.nom.localeCompare(b.nom))
+    .map((n) => ({
+      notionId: n.id,
+      nom: n.nom,
+      chapitreId: n.chapitre.id,
+      chapitreTitre: n.chapitre.titre,
+      nbQuestionsPubliees: n._count.questionsQcm,
+    }));
+}
+
 export const getDashboard = async () => {
   const [
     totalEleves,
@@ -38,6 +63,8 @@ export const getDashboard = async () => {
     nbElevesFragiles: g._count.eleveId,
   }));
 
+  const notionsAQuestionsInsuffisantes = await getNotionsAQuestionsInsuffisantes();
+
   return {
     totalEleves,
     totalCours,
@@ -51,5 +78,7 @@ export const getDashboard = async () => {
       aretes: aretesProposees,
     },
     notionsFragiles,
+    minQuestionsParNotion: MIN_QUESTIONS_PUBLIEES_PAR_NOTION,
+    notionsAQuestionsInsuffisantes,
   };
 };

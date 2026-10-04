@@ -5,6 +5,7 @@ import {
   createQcmSchema,
   updateQcmSchema,
   generateQcmIaSchema,
+  generateVariantesSchema,
   createSaisieLibreSchema,
   updateSaisieLibreSchema,
   generateSaisieLibreIaSchema,
@@ -48,6 +49,19 @@ export default async function questionsRoutes(fastify: FastifyInstance) {
     return reply
       .code(201)
       .send(await questionsService.generateQcmForChapitre(chapitreId, request.user.id, nombreQuestions));
+  });
+
+  // ---- Variantes de QCM (créées en A_VALIDER) ----
+  fastify.post("/questions-qcm/:id/variantes/generate-ia", async (request, reply) => {
+    const { id } = idParamSchema.parse(request.params);
+    const { nombre } = generateVariantesSchema.parse(request.body ?? {});
+    return reply.code(201).send(await questionsService.generateVariantesForQcm(id, request.user.id, nombre));
+  });
+
+  fastify.post("/chapitres/:chapitreId/questions-qcm/variantes/generate-ia", async (request) => {
+    const { chapitreId } = chapitreIdParamSchema.parse(request.params);
+    const { nombre } = generateVariantesSchema.parse(request.body ?? {});
+    return questionsService.generateVariantesForChapitre(chapitreId, request.user.id, nombre);
   });
 
   // ---- Saisie libre ----

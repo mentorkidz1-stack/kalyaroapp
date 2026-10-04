@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { AppError } from "../../plugins/error-handler.js";
 
-// Jeton dédié aux questions QCM reformulées/piochées à la volée : pas persistées comme
-// nouvelle ligne QuestionQcm (ce serait polluer la banque avec du contenu à usage unique).
+// Jeton dédié aux questions QCM servies à l'étudiant : il fige ce qui a été montré (énoncé,
+// choix remélangés) et la bonne réponse, pour corriger sans faire confiance au client.
 //
 // Chiffré (AES-256-GCM), pas juste signé : un JWT classique (jwt.sign) est signé mais son
 // payload reste lisible en clair par simple décodage base64 — un élève technique pouvait

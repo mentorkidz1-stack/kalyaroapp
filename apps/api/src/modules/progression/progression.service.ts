@@ -1,6 +1,5 @@
-import { Prisma, type TentativeEleve, type Notion, type QuestionQcm } from "@prisma/client";
+import { Prisma, type TentativeEleve } from "@prisma/client";
 import {
-  reformulateQuestion,
   generateSummarySheet,
   evaluateFreeAnswer,
   generateMetacognitiveQuestion,
@@ -15,6 +14,7 @@ import { recordDailyActivity, projectCurrentStreak } from "../../lib/streak.js";
 import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload } from "./attempt-token.js";
 import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
 import { computeNextProgression, estAcquise } from "./mastery.js";
+import { choisirQuestionSuivante, racineDe } from "./selection-qcm.js";
 
 const FICHE_RESUME_FAILURE_THRESHOLD = 3;
 const METACOGNITIVE_EVERY_N_ATTEMPTS = 3;
@@ -96,9 +96,9 @@ export const getParcoursChapitre = async (eleveId: string, chapitreId: string) =
 
 // ---- Boucle QCM ----
 
-// Ni l'IA (génération/reformulation) ni la saisie admin ne garantissent que la bonne
-// réponse change de position d'une question à l'autre — on le force ici, au seul
-// endroit où une question QCM part vers l'élève, quelle que soit sa source.
+// Ni l'IA (génération) ni la saisie admin ne garantissent que la bonne réponse change de
+// position d'une question à l'autre — on le force ici, au seul endroit où une question
+// QCM part vers l'étudiant, quelle que soit sa source.
 function shuffleChoix(choix: string[]): string[] {
   const shuffled = [...choix];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -108,64 +108,42 @@ function shuffleChoix(choix: string[]): string[] {
   return shuffled;
 }
 
-async function buildReformulatedQcmResponse(
-  eleveId: string,
-  notionId: string,
-  notion: Notion,
-  q: QuestionQcm
-) {
-  const reformulated = await reformulateQuestion({
-    notionNom: notion.nom,
-    enonceOriginal: q.enonce,
-    choixOriginal: q.choix as string[],
-    bonneReponseOriginal: q.bonneReponse,
-  });
-  const choix = shuffleChoix(reformulated.choix);
-  const attemptToken = signQcmAttemptToken({
-    eleveId,
-    notionId,
-    questionQcmId: q.id,
-    bonneReponse: reformulated.bonneReponse,
-    enonce: reformulated.enonce,
-    choix,
-  });
-  return { enonce: reformulated.enonce, choix, attemptToken, reformulee: true };
-}
-
+/**
+ * Prochaine question QCM d'une notion. Uniquement du contenu publié : après un échec, une
+ * variante validée de la question ratée (chantier 1.3) — plus jamais de reformulation IA
+ * générée en direct, dont le corrigé n'aurait été relu par personne.
+ */
 export const getNextQcm = async (eleveId: string, notionId: string) => {
   const notion = await prisma.notion.findUnique({ where: { id: notionId } });
   if (!notion) throw new AppError("Notion introuvable", 404);
 
-  const lastAttempt = await prisma.tentativeEleve.findFirst({
-    where: { eleveId, typeCible: "QCM", questionQcm: { notions: { some: { notionId } } } },
-    orderBy: { createdAt: "desc" },
-    include: { questionQcm: true },
-  });
+  const [lastAttempt, pool] = await Promise.all([
+    prisma.tentativeEleve.findFirst({
+      where: { eleveId, typeCible: "QCM", questionQcm: { notions: { some: { notionId } } } },
+      orderBy: { createdAt: "desc" },
+      include: { questionQcm: { select: { id: true, varianteDeId: true } } },
+    }),
+    prisma.questionQcm.findMany({
+      where: { statut: "PUBLIE", notions: { some: { notionId } } },
+    }),
+  ]);
 
-  if (lastAttempt?.correcte === false && lastAttempt.questionQcm) {
-    return buildReformulatedQcmResponse(eleveId, notionId, notion, lastAttempt.questionQcm);
-  }
-
-  const pool = await prisma.questionQcm.findMany({
-    where: { statut: "PUBLIE", notions: { some: { notionId } } },
-  });
+  const selection = choisirQuestionSuivante(
+    pool,
+    lastAttempt?.questionQcm
+      ? {
+          questionQcmId: lastAttempt.questionQcm.id,
+          correcte: lastAttempt.correcte,
+          questionRacineId: racineDe(lastAttempt.questionQcm),
+        }
+      : null
+  );
   // Absence de contenu, pas une erreur : le frontend affiche un état "aucune question
   // disponible" dédié plutôt qu'un écran d'erreur avec un bouton Réessayer inutile.
-  if (pool.length === 0) return null;
+  if (!selection) return null;
 
-  const excludeId = lastAttempt?.questionQcmId ?? null;
-  const candidates = pool.filter((q) => q.id !== excludeId);
-
-  if (candidates.length === 0 && lastAttempt?.questionQcm) {
-    // Une seule question publiée pour cette notion : on reformule plutôt que de
-    // renvoyer la question identique que l'élève vient de réussir.
-    return buildReformulatedQcmResponse(eleveId, notionId, notion, lastAttempt.questionQcm);
-  }
-
-  const options = candidates.length > 0 ? candidates : pool;
-  const chosen = options[Math.floor(Math.random() * options.length)]!;
+  const chosen = selection.question;
   const choix = shuffleChoix(chosen.choix as string[]);
-
   const attemptToken = signQcmAttemptToken({
     eleveId,
     notionId,
@@ -174,7 +152,7 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
     enonce: chosen.enonce,
     choix,
   });
-  return { enonce: chosen.enonce, choix, attemptToken, reformulee: false };
+  return { enonce: chosen.enonce, choix, attemptToken, estVariante: selection.motif === "variante" };
 };
 
 async function generateFicheResumeIfNeeded(notionId: string) {
@@ -325,10 +303,8 @@ function generateIndiceInBackground(
   reponseDonnee: string
 ) {
   (async () => {
-    // On utilise l'énoncé/les choix embarqués dans le jeton (ce que l'élève a réellement
-    // vu à l'écran), pas la question originale en base : si elle a été reformulée par
-    // l'IA, les valeurs numériques diffèrent et un indice basé sur la version d'origine
-    // induirait l'élève en erreur.
+    // On utilise l'énoncé/les choix embarqués dans le jeton : c'est exactement ce que
+    // l'étudiant a vu à l'écran, choix remélangés compris.
     const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId } });
     const explanation = await explainQcmAnswer({
       notionNom: notion.nom,
