@@ -12,6 +12,7 @@ import {
   advanceDiagnosticSchema,
 } from "./progression.schemas.js";
 import * as progressionService from "./progression.service.js";
+import { getCahierErreurs } from "./cahier-erreurs.service.js";
 import { listEpreuvesPourEtudiant } from "../passages/passages.service.js";
 
 export default async function progressionRoutes(fastify: FastifyInstance) {
@@ -53,6 +54,15 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
   fastify.post("/saisie-libre/repondre", async (request) => {
     const { questionSaisieLibreId, reponseDonnee, confiance } = submitFreeAnswerSchema.parse(request.body);
     return progressionService.submitFreeAnswer(request.user.id, questionSaisieLibreId, reponseDonnee, confiance);
+  });
+
+  fastify.get("/notions/:notionId/fiche", async (request) => {
+    const { notionId } = notionIdParamSchema.parse(request.params);
+    return progressionService.getFicheValidee(request.user.id, notionId);
+  });
+
+  fastify.get("/cahier-erreurs", async (request) => {
+    return getCahierErreurs(request.user.id);
   });
 
   fastify.get("/lucidite", async (request) => {

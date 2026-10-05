@@ -16,6 +16,7 @@ import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload
 import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
 import { computeNextProgression, estAcquise, type Confiance } from "./mastery.js";
 import { calculerLucidite } from "./lucidite.js";
+import { classerErreur, classerErreurEnArrierePlan, marquerErreursCorrigees, parcoursDeNotion } from "./cahier-erreurs.service.js";
 import { choisirQuestionSuivante, racineDe } from "./selection-qcm.js";
 
 const FICHE_RESUME_FAILURE_THRESHOLD = 3;
@@ -108,7 +109,7 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
   const notion = await prisma.notion.findUnique({ where: { id: notionId } });
   if (!notion) throw new AppError("Notion introuvable", 404);
 
-  const [lastAttempt, pool] = await Promise.all([
+  const [lastAttempt, pool, erreurs] = await Promise.all([
     prisma.tentativeEleve.findFirst({
       where: { eleveId, typeCible: "QCM", questionQcm: { notions: { some: { notionId } } } },
       orderBy: { createdAt: "desc" },
@@ -116,6 +117,13 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
     }),
     prisma.questionQcm.findMany({
       where: { statut: "PUBLIE", notions: { some: { notionId } } },
+    }),
+    // Erreurs pas encore rattrapées sur la notion (cahier d'erreurs) : elles reviennent.
+    prisma.tentativeEleve.findMany({
+      where: { eleveId, typeCible: "QCM", correcte: false, erreurCorrigeeAt: null, questionQcm: { notions: { some: { notionId } } } },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { questionQcm: { select: { id: true, varianteDeId: true } } },
     }),
   ]);
 
@@ -127,7 +135,9 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
           correcte: lastAttempt.correcte,
           questionRacineId: racineDe(lastAttempt.questionQcm),
         }
-      : null
+      : null,
+    Math.random,
+    erreurs.flatMap((e) => (e.questionQcm ? [{ questionQcmId: e.questionQcm.id, questionRacineId: racineDe(e.questionQcm) }] : []))
   );
   // Absence de contenu, pas une erreur : le frontend affiche un état "aucune question
   // disponible" dédié plutôt qu'un écran d'erreur avec un bouton Réessayer inutile.
@@ -152,6 +162,8 @@ export const getNextQcm = async (eleveId: string, notionId: string) => {
     choix,
     attemptToken,
     estVariante: selection.motif === "variante",
+    /** Question qui revient du cahier d'erreurs (erreur passée pas encore rattrapée). */
+    retourCahierErreurs: selection.motif === "erreur_a_rattraper",
     figure: chosen.figure ?? null,
     typeReponse: chosen.typeReponse,
     // Aides à la saisie seulement (aimant de grille, unité) — pas la position attendue.
@@ -274,6 +286,13 @@ export const submitQcmAnswer = async (
     },
   });
 
+  // Cahier d'erreurs : une réussite qui compte (pas « au hasard ») rattrape les erreurs
+  // antérieures sur la même question ou sa famille (variantes).
+  if (correcte && confiance !== "HASARD") {
+    const q = await prisma.questionQcm.findUnique({ where: { id: payload.questionQcmId }, select: { id: true, varianteDeId: true } });
+    if (q) await marquerErreursCorrigees(eleveId, { questionQcmRacineId: racineDe(q) }, tentative.createdAt);
+  }
+
   // La tentative et la progression sont déjà persistées à ce stade. Les trois appels IA
   // ci-dessous sont des enrichissements de la réponse (fiche résumé, question méta,
   // indice) : si l'un d'eux échoue (quota IA, réseau...), on ne doit ni faire échouer
@@ -345,7 +364,23 @@ function generateIndiceInBackground(
       where: { id: tentativeId },
       data: { indice: explanation.indice },
     });
-  })().catch(() => {
+  })()
+    .catch(() => undefined)
+    // Puis, sans retarder l'indice : classement de l'erreur pour le cahier d'erreurs.
+    .then(async () => {
+      const surFigure = payload.typeReponse && payload.typeReponse !== "CHOIX" ? payload.typeReponse : null;
+      const notion = await prisma.notion.findUniqueOrThrow({ where: { id: payload.notionId }, select: { nom: true } });
+      await classerErreur(tentativeId, {
+        parcours: await parcoursDeNotion(payload.notionId),
+        notionNom: notion.nom,
+        format: "QCM",
+        question: payload.enonce,
+        choix: payload.choix,
+        reponseAttendue: payload.bonneReponse,
+        reponseEleve: surFigure ? libelleReponseDonnee(surFigure, reponseDonnee) : reponseDonnee,
+      });
+    })
+    .catch(() => {
     // Échec silencieux : le champ indice reste null, le sondage frontend abandonnera
     // après son délai maximal plutôt que de bloquer indéfiniment.
   });
@@ -397,7 +432,7 @@ export const submitFreeAnswer = async (
   const previousAttemptsCount = await prisma.tentativeEleve.count({
     where: { eleveId, questionSaisieLibreId },
   });
-  await prisma.tentativeEleve.create({
+  const tentative = await prisma.tentativeEleve.create({
     data: {
       eleveId,
       typeCible: "SAISIE_LIBRE",
@@ -411,7 +446,37 @@ export const submitFreeAnswer = async (
   });
   await recordDailyActivity(eleveId);
 
+  if (evaluation.valide) {
+    await marquerErreursCorrigees(eleveId, { questionSaisieLibreId }, tentative.createdAt);
+  } else {
+    classerErreurEnArrierePlan(tentative.id, async () => {
+      const lien = await prisma.questionSaisieLibreNotion.findFirst({
+        where: { questionSaisieLibreId },
+        select: { notion: { select: { id: true, nom: true } } },
+      });
+      return {
+        parcours: lien ? await parcoursDeNotion(lien.notion.id) : "SCOLAIRE",
+        notionNom: lien?.notion.nom ?? "",
+        format: "REDIGEE",
+        question: question.enonce,
+        reponseAttendue: question.reponseReference,
+        reponseEleve: reponseDonnee,
+      };
+    });
+  }
+
   return evaluation;
+};
+
+/** Fiche résumé d'une notion, seulement si un admin l'a validée (remède du cahier d'erreurs). */
+export const getFicheValidee = async (eleveId: string, notionId: string) => {
+  const matiereIds = await getAccessibleMatiereIds(eleveId);
+  const fiche = await prisma.ficheResume.findFirst({
+    where: { notionId, statut: "PUBLIE", notion: { chapitre: { cours: { matiereId: { in: matiereIds } } } } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, contenu: true },
+  });
+  return { fiche };
 };
 
 // ---- Révision espacée ----

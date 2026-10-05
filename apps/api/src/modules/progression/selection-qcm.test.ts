@@ -86,3 +86,29 @@ describe("choisirQuestionSuivante", () => {
     expect(motifs).toEqual(new Set(["nouvelle"]));
   });
 });
+
+describe("erreurs à rattraper (cahier d'erreurs)", () => {
+  const q = (id: string, varianteDeId: string | null = null): QuestionCandidate => ({ id, statut: "PUBLIE", varianteDeId });
+  const questions = [q("a"), q("a-v1", "a"), q("b"), q("c")];
+
+  it("fait revenir une erreur passée sous forme de variante", () => {
+    const r = choisirQuestionSuivante(questions, { questionQcmId: "c", correcte: true, questionRacineId: "c" }, () => 0, [
+      { questionQcmId: "a", questionRacineId: "a" },
+    ]);
+    expect(r).toEqual({ question: questions[1], motif: "erreur_a_rattraper" });
+  });
+
+  it("ressert la question ratée si la famille n'a pas de variante", () => {
+    const r = choisirQuestionSuivante(questions, { questionQcmId: "c", correcte: true, questionRacineId: "c" }, () => 0, [
+      { questionQcmId: "b", questionRacineId: "b" },
+    ]);
+    expect(r?.question.id).toBe("b");
+  });
+
+  it("l'échec qui vient d'avoir lieu reste prioritaire", () => {
+    const r = choisirQuestionSuivante(questions, { questionQcmId: "a", correcte: false, questionRacineId: "a" }, () => 0, [
+      { questionQcmId: "b", questionRacineId: "b" },
+    ]);
+    expect(r).toEqual({ question: questions[1], motif: "variante" });
+  });
+});

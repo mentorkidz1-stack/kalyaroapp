@@ -17,6 +17,7 @@ export * from "./schemas/generate-evaluation-feedback.js";
 export * from "./schemas/grade-exam-answer.js";
 export * from "./schemas/propose-exam-split.js";
 export * from "./schemas/transcribe-handwritten-answer.js";
+export * from "./schemas/classify-error.js";
 
 export * from "./functions/generate-qcm.js";
 export * from "./functions/generate-saisie-libre.js";
@@ -33,5 +34,6 @@ export * from "./functions/generate-evaluation-feedback.js";
 export * from "./functions/grade-exam-answer.js";
 export * from "./functions/propose-exam-split.js";
 export * from "./functions/transcribe-handwritten-answer.js";
+export * from "./functions/classify-error.js";
 
 export { consignePublic, type Parcours } from "./prompts/shared.js";

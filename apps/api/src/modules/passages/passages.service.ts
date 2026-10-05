@@ -6,6 +6,7 @@ import { assertMatiereAccessible } from "../../lib/matiere-access.js";
 import { recordDailyActivity } from "../../lib/streak.js";
 import { deleteImageFile, getImageContentType, getImageFileStream, modeStockageImages, saveImageFile } from "../../lib/image-upload.js";
 import { startPrerequisiteDescent } from "../progression/progression.service.js";
+import { classerErreurEnArrierePlan, marquerErreursCorrigees } from "../progression/cahier-erreurs.service.js";
 import { arrondirPoints, calculerRapport, estRatee, type QuestionBareme } from "./notation.js";
 import {
   DELAI_GRACE_MS,
@@ -419,7 +420,7 @@ async function noterEtEnregistrer(
   const precedentes = await prisma.tentativeEleve.count({
     where: { eleveId, epreuveId: epreuve.id, questionEpreuveId: question.questionEpreuveId },
   });
-  await prisma.tentativeEleve.create({
+  const tentative = await prisma.tentativeEleve.create({
     data: {
       eleveId,
       typeCible: "EPREUVE",
@@ -435,6 +436,23 @@ async function noterEtEnregistrer(
       tentativeNumero: precedentes + 1,
     },
   });
+  // Cahier d'erreurs (chantier 3.2).
+  if (ratee) {
+    classerErreurEnArrierePlan(tentative.id, async () => ({
+      parcours: epreuve.matiere.type,
+      notionNom: question.notionNom ?? "",
+      format: "REDIGEE",
+      question: question.enonce,
+      reponseAttendue: question.corrigesValides[0] ?? "",
+      reponseEleve: reponseDonnee,
+    }));
+  } else {
+    await marquerErreursCorrigees(
+      eleveId,
+      { epreuveId: epreuve.id, questionEpreuveId: question.questionEpreuveId },
+      tentative.createdAt
+    );
+  }
   return { pointsObtenus, ratee, evaluationIa };
 }
 

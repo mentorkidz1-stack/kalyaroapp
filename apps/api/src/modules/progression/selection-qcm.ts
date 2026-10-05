@@ -4,6 +4,8 @@
 // a plus aucune génération IA en direct ici ; après un échec on sert une variante validée
 // de la question ratée, à défaut une autre question publiée de la notion, et en dernier
 // recours la même question (le choix des réponses est remélangé par l'appelant).
+// Cahier d'erreurs (chantier 3.2) : une erreur pas encore rattrapée revient plus tard, de
+// préférence sous la forme d'une variante de la question ratée.
 
 export interface QuestionCandidate {
   id: string;
@@ -18,7 +20,13 @@ export interface DerniereTentative {
   questionRacineId: string;
 }
 
-export type MotifSelection = "variante" | "autre_question" | "meme_question" | "nouvelle";
+export type MotifSelection = "variante" | "erreur_a_rattraper" | "autre_question" | "meme_question" | "nouvelle";
+
+/** Erreur passée, pas encore rattrapée, sur une question de la notion. */
+export interface ErreurARattraper {
+  questionQcmId: string;
+  questionRacineId: string;
+}
 
 export function racineDe(q: Pick<QuestionCandidate, "id" | "varianteDeId">): string {
   return q.varianteDeId ?? q.id;
@@ -27,7 +35,8 @@ export function racineDe(q: Pick<QuestionCandidate, "id" | "varianteDeId">): str
 export function choisirQuestionSuivante<T extends QuestionCandidate>(
   questions: T[],
   derniere: DerniereTentative | null,
-  random: () => number = Math.random
+  random: () => number = Math.random,
+  erreursARattraper: ErreurARattraper[] = []
 ): { question: T; motif: MotifSelection } | null {
   const pool = questions.filter((q) => q.statut === "PUBLIE");
   if (pool.length === 0) return null;
@@ -40,6 +49,15 @@ export function choisirQuestionSuivante<T extends QuestionCandidate>(
     // l'étudiant vient de rater une variante.
     const famille = autres.filter((q) => racineDe(q) === derniere.questionRacineId);
     if (famille.length > 0) return { question: tirer(famille), motif: "variante" };
+  }
+
+  if (erreursARattraper.length > 0) {
+    const familles = new Set(erreursARattraper.map((e) => e.questionRacineId));
+    const ratees = new Set(erreursARattraper.map((e) => e.questionQcmId));
+    const aRattraper = autres.filter((q) => familles.has(racineDe(q)));
+    const variantes = aRattraper.filter((q) => !ratees.has(q.id));
+    const choix = variantes.length > 0 ? variantes : aRattraper;
+    if (choix.length > 0) return { question: tirer(choix), motif: "erreur_a_rattraper" };
   }
 
   if (autres.length > 0) {

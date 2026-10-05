@@ -560,6 +560,17 @@ model PassageEpreuve {
 // SUIVI ÉLÈVE / MOTEUR DE MAÎTRISE
 // ============================================================
 
+/// Cause d'une erreur, pour le cahier d'erreurs (chantier 3.2).
+enum TypeErreur {
+  CONNAISSANCE
+  CONFUSION
+  PROCEDURE
+  LECTURE_ENONCE
+  CALCUL
+  METHODE
+  REDACTION
+}
+
 /// Confiance déclarée par l'élève avant de valider une réponse (chantier 3.1).
 enum Confiance {
   SUR
@@ -604,10 +615,17 @@ model TentativeEleve {
   indice                String?
   /// Confiance déclarée avant de valider (chantier 3.1) ; null pour les épreuves et l'historique.
   confiance             Confiance?
+  /// Cause de l'erreur classée par l'IA en arrière-plan (chantier 3.2) ; null si juste ou en attente.
+  typeErreur            TypeErreur?        @map("type_erreur")
+  /// Une phrase pour l'élève : ce qui révèle ce type d'erreur.
+  explicationErreur     String?            @map("explication_erreur")
+  /// Erreur rattrapée (question de la même famille réussie ensuite) : « en voie de correction ».
+  erreurCorrigeeAt      DateTime?          @map("erreur_corrigee_at")
 
   reponsesMetacognitives ReponseMetacognitive[]
 
   @@index([passageId])
+  @@index([eleveId, correcte])
   @@map("tentatives_eleve")
 }
 
