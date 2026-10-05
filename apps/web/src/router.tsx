@@ -7,6 +7,7 @@ import { ParcoursPage } from "./features/parcours/ParcoursPage";
 import { QcmSessionPage } from "./features/qcm/QcmSessionPage";
 import { SaisieLibrePage } from "./features/saisie-libre/SaisieLibrePage";
 import { RevisionsPage } from "./features/revisions/RevisionsPage";
+import { CahierErreursPage } from "./features/erreurs/CahierErreursPage";
 import { RevisionSessionPage } from "./features/revisions/RevisionSessionPage";
 import { EpreuvesListPage } from "./features/epreuves/EpreuvesListPage";
 import { EpreuveSessionPage } from "./features/epreuves/EpreuveSessionPage";
@@ -54,6 +55,7 @@ export const router = createBrowserRouter([
           { path: "cours", element: <MesCoursPage /> },
           { path: "parcours/:chapitreId", element: <ParcoursPage /> },
           { path: "revisions", element: <RevisionsPage /> },
+          { path: "erreurs", element: <CahierErreursPage /> },
           { path: "epreuves", element: <EpreuvesListPage /> },
           { path: "evaluations", element: <EvaluationsListPage /> },
         ],

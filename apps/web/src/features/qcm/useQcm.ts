@@ -9,6 +9,8 @@ export interface NextQcm {
   attemptToken: string;
   /** Variante validée de la question ratée juste avant. */
   estVariante: boolean;
+  /** Revient du cahier d'erreurs : une erreur passée à rattraper. */
+  retourCahierErreurs?: boolean;
   /** Figure dessinée par l'application (description JSON validée). */
   figure?: unknown;
   /** Réponse par choix, ou sur la figure (placer un point, lire une valeur). */

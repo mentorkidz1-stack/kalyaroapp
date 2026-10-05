@@ -160,6 +160,9 @@ export function QcmSessionPage() {
         )}
         {question && (
           <Card className={`transition-opacity duration-150 ${isTransitioning ? "opacity-0" : "opacity-100"}`}>
+            {question.retourCahierErreurs && (
+              <div className="text-[11px] font-mono uppercase tracking-wide text-[#8A5A0E] mb-2">📒 Revient de ton cahier d'erreurs</div>
+            )}
             <h3 className="font-display text-[19px] leading-snug text-ink mb-4"><MathText text={question.enonce} /></h3>
             <QuestionQcmCorps
               key={question.attemptToken}
