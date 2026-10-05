@@ -14,6 +14,8 @@ import {
   niveauAMonte,
   type NiveauMaitrise,
   MathText,
+  messageConfiance,
+  type Confiance,
 } from "../../design-system";
 import { useQcmNext, useSubmitQcm, useTentativeIndice, type RepondreResult } from "./useQcm";
 import { QuestionQcmCorps } from "./QuestionQcmCorps";
@@ -47,7 +49,6 @@ export function QcmSessionPage() {
   const location = useLocation();
   const returnToEpreuve = (location.state as QcmLocationState | null)?.returnToEpreuve;
 
-  const [selected, setSelected] = useState<string | null>(null);
   const [result, setResult] = useState<RepondreResult | null>(null);
   const [metaReponse, setMetaReponse] = useState("");
   const [metaSubmitted, setMetaSubmitted] = useState(false);
@@ -76,13 +77,12 @@ export function QcmSessionPage() {
     onSuccess: () => setMetaSubmitted(true),
   });
 
-  function handleChoice(choix: string) {
+  function handleChoice(choix: string, confiance: Confiance) {
     if (result || !question || submittingRef.current) return;
     submittingRef.current = true;
     setSubmitError(null);
-    setSelected(choix);
     submitMutation.mutate(
-      { attemptToken: question.attemptToken, reponseDonnee: choix },
+      { attemptToken: question.attemptToken, reponseDonnee: choix, confiance },
       {
         onSuccess: (data) => {
           submittingRef.current = false;
@@ -90,7 +90,6 @@ export function QcmSessionPage() {
         },
         onError: () => {
           submittingRef.current = false;
-          setSelected(null);
           setSubmitError("Ta réponse n'a pas pu être envoyée. Réessaie.");
         },
       }
@@ -100,7 +99,6 @@ export function QcmSessionPage() {
   async function handleContinue() {
     setIsTransitioning(true);
     await new Promise((resolve) => setTimeout(resolve, 150));
-    setSelected(null);
     setResult(null);
     setMetaReponse("");
     setMetaSubmitted(false);
@@ -166,7 +164,6 @@ export function QcmSessionPage() {
             <QuestionQcmCorps
               key={question.attemptToken}
               question={question}
-              selected={selected}
               correcte={result ? result.correcte : null}
               disabled={submitMutation.isPending}
               onRepondre={handleChoice}
@@ -189,6 +186,11 @@ export function QcmSessionPage() {
                         ? "Pas tout à fait — retente une prochaine fois."
                         : "Pas tout à fait… un instant, on prépare une explication."}
                 </FeedbackBlock>
+                {messageConfiance(result) && (
+                  <p className={`mt-2 text-sm font-semibold ${result.erreurAssuree ? "text-alert" : "text-[#8A5A0E]"}`}>
+                    {messageConfiance(result)}
+                  </p>
+                )}
               </div>
             )}
 

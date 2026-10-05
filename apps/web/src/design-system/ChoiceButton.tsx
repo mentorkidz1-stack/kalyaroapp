@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type ChoiceState = "default" | "correct" | "wrong";
+type ChoiceState = "default" | "selected" | "correct" | "wrong";
 
 interface ChoiceButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   state?: ChoiceState;
@@ -8,6 +8,8 @@ interface ChoiceButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const stateClasses: Record<ChoiceState, string> = {
   default: "border-line bg-white hover:border-primary",
+  /** Choisi, pas encore validé (l'élève déclare d'abord sa confiance). */
+  selected: "border-primary bg-white text-primary-deep shadow-[0_0_0_3px_rgba(27,122,92,0.2)]",
   correct: "border-primary bg-primary-tint text-primary-deep pop-in",
   wrong: "border-alert bg-alert-tint text-alert shake-once",
 };

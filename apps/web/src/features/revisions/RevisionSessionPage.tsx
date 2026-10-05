@@ -14,6 +14,8 @@ import {
   MasteryCelebration,
   niveauAMonte,
   MathText,
+  messageConfiance,
+  type Confiance,
 } from "../../design-system";
 import { QuestionQcmCorps } from "../qcm/QuestionQcmCorps";
 import { useSubmitQcm, useTentativeIndice, type NextQcm, type RepondreResult } from "../qcm/useQcm";
@@ -35,7 +37,6 @@ export function RevisionSessionPage() {
   const plan = planQuery.data?.seance ?? [];
 
   const [index, setIndex] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
   const [result, setResult] = useState<RepondreResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Dernier résultat par notion : une notion est « consolidée » si sa dernière réponse de la séance est juste.
@@ -69,13 +70,12 @@ export function RevisionSessionPage() {
     if (termine) queryClient.invalidateQueries({ queryKey: REVISIONS_DUES_KEY });
   }, [termine, queryClient]);
 
-  function handleChoice(choix: string) {
+  function handleChoice(choix: string, confiance: Confiance) {
     if (result || !question || !notionId || submittingRef.current) return;
     submittingRef.current = true;
     setSubmitError(null);
-    setSelected(choix);
     submitMutation.mutate(
-      { attemptToken: question.attemptToken, reponseDonnee: choix },
+      { attemptToken: question.attemptToken, reponseDonnee: choix, confiance },
       {
         onSuccess: (data) => {
           submittingRef.current = false;
@@ -84,7 +84,6 @@ export function RevisionSessionPage() {
         },
         onError: () => {
           submittingRef.current = false;
-          setSelected(null);
           setSubmitError("Ta réponse n'a pas pu être envoyée. Réessaie.");
         },
       }
@@ -92,7 +91,6 @@ export function RevisionSessionPage() {
   }
 
   function handleContinue() {
-    setSelected(null);
     setResult(null);
     setSubmitError(null);
     setIndex((i) => i + 1);
@@ -159,7 +157,6 @@ export function RevisionSessionPage() {
             <QuestionQcmCorps
               key={question.attemptToken}
               question={question}
-              selected={selected}
               correcte={result ? result.correcte : null}
               disabled={submitMutation.isPending}
               onRepondre={handleChoice}
@@ -182,6 +179,11 @@ export function RevisionSessionPage() {
                         ? "Pas tout à fait — cette notion reviendra demain."
                         : "Pas tout à fait… un instant, on prépare une explication."}
                 </FeedbackBlock>
+                {messageConfiance(result) && (
+                  <p className={`mt-2 text-sm font-semibold ${result.erreurAssuree ? "text-alert" : "text-[#8A5A0E]"}`}>
+                    {messageConfiance(result)}
+                  </p>
+                )}
                 {niveauAMonte(result.statutPrecedent, result.statutNotion) && (
                   <p className="mt-2 text-sm text-ink flex items-center gap-2">
                     Niveau atteint : <MasteryBadge statut={result.statutNotion} />

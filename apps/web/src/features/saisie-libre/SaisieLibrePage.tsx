@@ -3,7 +3,19 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, ClavierMaths, FeedbackBlock, LoadingState, EmptyState, ErrorState, MathText, FigureRenderer } from "../../design-system";
+import {
+  Button,
+  Card,
+  ChoixConfiance,
+  ClavierMaths,
+  FeedbackBlock,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  MathText,
+  FigureRenderer,
+  type Confiance,
+} from "../../design-system";
 
 interface NextSaisieLibre {
   id: string;
@@ -21,6 +33,7 @@ export function SaisieLibrePage() {
   const [reponse, setReponse] = useState("");
   const zoneReponse = useRef<HTMLTextAreaElement>(null);
   const [result, setResult] = useState<RepondreResult | null>(null);
+  const [confiance, setConfiance] = useState<Confiance | null>(null);
 
   const {
     data: question,
@@ -35,10 +48,11 @@ export function SaisieLibrePage() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (c: Confiance) =>
       api.post<RepondreResult>("/api/eleve/saisie-libre/repondre", {
         questionSaisieLibreId: question!.id,
         reponseDonnee: reponse,
+        confiance: c,
       }),
     onSuccess: (data) => setResult(data),
   });
@@ -46,6 +60,7 @@ export function SaisieLibrePage() {
   async function handleContinue() {
     setReponse("");
     setResult(null);
+    setConfiance(null);
     await refetch();
   }
 
@@ -103,17 +118,27 @@ export function SaisieLibrePage() {
             {result && (
               <FeedbackBlock variant={result.valide ? "ok" : "warn"}><MathText text={result.explication} /></FeedbackBlock>
             )}
+            {result && !result.valide && confiance === "SUR" && (
+              <p className="mt-2 text-sm font-semibold text-alert">Tu étais sûr — c'est l'erreur la plus importante à corriger.</p>
+            )}
 
             <div className="mt-4">
               {result ? (
                 <Button onClick={handleContinue}>Continuer →</Button>
               ) : (
-                <Button
-                  onClick={() => submitMutation.mutate()}
-                  disabled={!reponse.trim() || submitMutation.isPending}
-                >
-                  {submitMutation.isPending ? "Vérification…" : "Valider"}
-                </Button>
+                reponse.trim() && (
+                  <>
+                    <ChoixConfiance
+                      disabled={submitMutation.isPending}
+                      enCours={submitMutation.isPending ? confiance : null}
+                      onChoix={(c) => {
+                        setConfiance(c);
+                        submitMutation.mutate(c);
+                      }}
+                    />
+                    {submitMutation.isPending && <p className="text-sm text-ink-soft text-center">Vérification…</p>}
+                  </>
+                )
               )}
             </div>
           </Card>

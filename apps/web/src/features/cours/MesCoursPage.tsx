@@ -5,6 +5,7 @@ import { AppHeader } from "../../components/AppHeader";
 import { Card, LoadingState, EmptyState, ErrorState } from "../../design-system";
 import { useStreak } from "../streak/useStreak";
 import { libelleRevisions, useRevisionsDues } from "../revisions/useRevisions";
+import { BlocLucidite, useLucidite } from "./Lucidite";
 
 interface Chapitre {
   id: string;
@@ -14,6 +15,7 @@ interface Chapitre {
 interface Cours {
   id: string;
   titre: string;
+  matiereId: string;
   chapitres: Chapitre[];
 }
 
@@ -25,6 +27,7 @@ export function MesCoursPage() {
   });
   const { data: streakData } = useStreak();
   const { data: revisions } = useRevisionsDues();
+  const { data: lucidites } = useLucidite();
 
   return (
     <div className="min-h-screen bg-bg">
@@ -78,6 +81,7 @@ export function MesCoursPage() {
                     ))}
                 </div>
               )}
+              <BlocLucidite lucidite={lucidites?.find((l) => l.matiereId === cours.matiereId)} />
             </Card>
           ))}
         </div>

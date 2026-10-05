@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
-import { Button, Card, ClavierMaths, LoadingState, EmptyState, ErrorState, MathText, FigureRenderer } from "../../design-system";
+import { Button, Card, ClavierMaths, LoadingState, EmptyState, ErrorState, MathText, FigureRenderer, type Confiance } from "../../design-system";
 import { BoutonPhotos, ConseilsPhoto, envoyerPhotos } from "./photos";
 import { useQcmNext, useSubmitQcm } from "../qcm/useQcm";
 import { QuestionQcmCorps } from "../qcm/QuestionQcmCorps";
@@ -368,7 +368,6 @@ function SondagePhase({
 }) {
   const { data: question, isLoading, error, refetch } = useQcmNext(notion.id);
   const submitQcm = useSubmitQcm();
-  const [selected, setSelected] = useState<string | null>(null);
   const [correcte, setCorrecte] = useState<boolean | null>(null);
   const [tentativeId, setTentativeId] = useState<string | null>(null);
   const [phaseError, setPhaseError] = useState<string | null>(null);
@@ -383,13 +382,12 @@ function SondagePhase({
     onError: () => setPhaseError("Impossible de continuer. Réessaie."),
   });
 
-  function handleChoice(choix: string) {
+  function handleChoice(choix: string, confiance: Confiance) {
     if (correcte !== null || !question || submittingRef.current) return;
     submittingRef.current = true;
     setPhaseError(null);
-    setSelected(choix);
     submitQcm.mutate(
-      { attemptToken: question.attemptToken, reponseDonnee: choix },
+      { attemptToken: question.attemptToken, reponseDonnee: choix, confiance },
       {
         onSuccess: (result) => {
           submittingRef.current = false;
@@ -398,7 +396,6 @@ function SondagePhase({
         },
         onError: () => {
           submittingRef.current = false;
-          setSelected(null);
           setPhaseError("Ta réponse n'a pas pu être envoyée. Réessaie.");
         },
       }
@@ -423,7 +420,6 @@ function SondagePhase({
           <QuestionQcmCorps
             key={question.attemptToken}
             question={question}
-            selected={selected}
             correcte={correcte}
             disabled={submitQcm.isPending}
             onRepondre={handleChoice}

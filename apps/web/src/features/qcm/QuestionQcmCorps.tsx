@@ -1,104 +1,94 @@
 import { useState } from "react";
 import { encoderPoint, lireNombre } from "@kalyaro/shared";
-import {
-  Button,
-  ChoiceButton,
-  FigureRenderer,
-  MathText,
-  fieldInputClass,
-} from "../../design-system";
+import { ChoiceButton, ChoixConfiance, FigureRenderer, MathText, fieldInputClass, type Confiance } from "../../design-system";
 import { formatNombre } from "../../design-system/figures/outils";
 import type { NextQcm } from "./useQcm";
 
 /**
  * Corps d'une question QCM, commun au parcours, aux révisions et au sondage de prérequis :
  * figure + choix, ou réponse donnée SUR la figure (placer un point, lire une valeur).
+ * L'élève choisit sa réponse, puis valide en déclarant sa confiance (chantier 3.1).
  * Le parent garde l'envoi et le verdict ; il change la `key` à chaque nouvelle question.
  * Comme pour les choix, une erreur ne dévoile pas la bonne réponse : l'indice IA guide.
  */
 export function QuestionQcmCorps({
   question,
-  selected,
   correcte,
   disabled,
   onRepondre,
 }: {
   question: NextQcm;
-  /** Choix envoyé (QCM à choix) — pour colorer le bouton après correction. */
-  selected: string | null;
   correcte: boolean | null;
   disabled: boolean;
-  onRepondre: (reponse: string) => void;
+  onRepondre: (reponse: string, confiance: Confiance) => void;
 }) {
   const type = question.typeReponse ?? "CHOIX";
+  const props = { question, correcte, disabled, onRepondre };
+  if (type === "PLACER_POINT") return <PlacerPoint {...props} />;
+  if (type === "LIRE_VALEUR") return <LireValeur {...props} />;
+  return <Choix {...props} />;
+}
 
-  if (type === "PLACER_POINT") {
-    return (
-      <PlacerPoint
-        question={question}
-        correcte={correcte}
-        disabled={disabled}
-        onRepondre={onRepondre}
-      />
-    );
-  }
-  if (type === "LIRE_VALEUR") {
-    return (
-      <LireValeur
-        question={question}
-        correcte={correcte}
-        disabled={disabled}
-        onRepondre={onRepondre}
-      />
-    );
-  }
+type PropsReponse = {
+  question: NextQcm;
+  correcte: boolean | null;
+  disabled: boolean;
+  onRepondre: (reponse: string, confiance: Confiance) => void;
+};
+
+/** Validation par la confiance : visible tant que la réponse n'est pas corrigée. */
+function Validation({
+  pret,
+  correcte,
+  disabled,
+  envoyer,
+}: {
+  pret: boolean;
+  correcte: boolean | null;
+  disabled: boolean;
+  envoyer: (confiance: Confiance) => void;
+}) {
+  const [choisie, setChoisie] = useState<Confiance | null>(null);
+  if (correcte !== null || !pret) return null;
+  return (
+    <ChoixConfiance
+      disabled={disabled}
+      enCours={disabled ? choisie : null}
+      onChoix={(c) => {
+        setChoisie(c);
+        envoyer(c);
+      }}
+    />
+  );
+}
+
+function Choix({ question, correcte, disabled, onRepondre }: PropsReponse) {
+  const [choisi, setChoisi] = useState<string | null>(null);
+  const fige = disabled || correcte !== null;
   return (
     <>
       {question.figure != null && <FigureRenderer figure={question.figure} />}
       {question.choix.map((choix) => {
         const state =
-          correcte !== null && selected === choix
-            ? correcte
-              ? "correct"
-              : "wrong"
-            : "default";
+          choisi !== choix ? "default" : correcte === null ? "selected" : correcte ? "correct" : "wrong";
         return (
-          <ChoiceButton
-            key={choix}
-            state={state}
-            disabled={disabled || correcte !== null}
-            onClick={() => onRepondre(choix)}
-          >
+          <ChoiceButton key={choix} state={state} disabled={fige} aria-pressed={choisi === choix} onClick={() => setChoisi(choix)}>
             <MathText text={choix} />
           </ChoiceButton>
         );
       })}
+      <Validation pret={choisi !== null} correcte={correcte} disabled={disabled} envoyer={(c) => choisi && onRepondre(choisi, c)} />
     </>
   );
 }
 
-type PropsInteractif = {
-  question: NextQcm;
-  correcte: boolean | null;
-  disabled: boolean;
-  onRepondre: (reponse: string) => void;
-};
-
-function PlacerPoint({
-  question,
-  correcte,
-  disabled,
-  onRepondre,
-}: PropsInteractif) {
+function PlacerPoint({ question, correcte, disabled, onRepondre }: PropsReponse) {
   const [point, setPoint] = useState<[number, number] | null>(null);
   const fige = disabled || correcte !== null;
 
   return (
     <>
-      <p className="text-xs text-ink-soft mb-1">
-        Touche le repère pour placer ton point (tu peux le déplacer avant de
-        valider).
-      </p>
+      <p className="text-xs text-ink-soft mb-1">Touche le repère pour placer ton point (tu peux le déplacer avant de valider).</p>
       <FigureRenderer
         figure={question.figure}
         interaction={{
@@ -112,63 +102,33 @@ function PlacerPoint({
       <p className="text-sm text-ink text-center mb-3" aria-live="polite">
         {point ? (
           <>
-            Ton point :{" "}
-            <strong>
-              ({formatNombre(point[0])} ; {formatNombre(point[1])})
-            </strong>
+            Ton point : <strong>({formatNombre(point[0])} ; {formatNombre(point[1])})</strong>
           </>
         ) : (
           "Aucun point placé pour l'instant."
         )}
       </p>
-      {correcte === null && (
-        <Button
-          disabled={!point || fige}
-          onClick={() => point && onRepondre(encoderPoint(point[0], point[1]))}
-        >
-          Valider ce point
-        </Button>
-      )}
+      <Validation
+        pret={point !== null}
+        correcte={correcte}
+        disabled={disabled}
+        envoyer={(c) => point && onRepondre(encoderPoint(point[0], point[1]), c)}
+      />
     </>
   );
 }
 
-function LireValeur({
-  question,
-  correcte,
-  disabled,
-  onRepondre,
-}: PropsInteractif) {
+function LireValeur({ question, correcte, disabled, onRepondre }: PropsReponse) {
   const [saisie, setSaisie] = useState("");
-  const [illisible, setIllisible] = useState(false);
   const fige = disabled || correcte !== null;
   const unite = question.interaction?.unite;
+  const lisible = lireNombre(saisie) !== null;
 
-  function valider() {
-    if (lireNombre(saisie) === null) {
-      setIllisible(true);
-      return;
-    }
-    setIllisible(false);
-    onRepondre(saisie.trim());
-  }
-
-  const bordure =
-    correcte === true
-      ? "border-primary bg-primary-tint"
-      : correcte === false
-        ? "border-alert bg-alert-tint"
-        : "";
+  const bordure = correcte === true ? "border-primary bg-primary-tint" : correcte === false ? "border-alert bg-alert-tint" : "";
   return (
     <>
       {question.figure != null && <FigureRenderer figure={question.figure} />}
-      <form
-        className="flex items-center gap-2 mb-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!fige) valider();
-        }}
-      >
+      <form className="flex items-center gap-2 mb-3" onSubmit={(e) => e.preventDefault()}>
         <label className="sr-only" htmlFor="valeur-lue">
           Valeur lue sur la figure
         </label>
@@ -180,27 +140,14 @@ function LireValeur({
           placeholder="Ta lecture, ex. 2,5"
           value={saisie}
           disabled={fige}
-          onChange={(e) => {
-            setSaisie(e.target.value);
-            setIllisible(false);
-          }}
+          onChange={(e) => setSaisie(e.target.value)}
         />
-        {unite && (
-          <span className="text-sm text-ink-soft whitespace-nowrap">
-            {unite}
-          </span>
-        )}
+        {unite && <span className="text-sm text-ink-soft whitespace-nowrap">{unite}</span>}
       </form>
-      {illisible && (
-        <p className="text-xs text-alert mb-2">
-          Écris un nombre, par exemple 2,5 ou −3 ou 1/2.
-        </p>
+      {saisie.trim() !== "" && !lisible && (
+        <p className="text-xs text-alert mb-2">Écris un nombre, par exemple 2,5 ou −3 ou 1/2.</p>
       )}
-      {correcte === null && (
-        <Button disabled={!saisie.trim() || fige} onClick={valider}>
-          Valider
-        </Button>
-      )}
+      <Validation pret={lisible} correcte={correcte} disabled={disabled} envoyer={(c) => onRepondre(saisie.trim(), c)} />
     </>
   );
 }

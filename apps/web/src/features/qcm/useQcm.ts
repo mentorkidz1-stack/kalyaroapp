@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import type { NiveauMaitrise } from "../../design-system";
+import type { Confiance, NiveauMaitrise } from "../../design-system";
 
 export interface NextQcm {
   enonce: string;
@@ -34,6 +34,10 @@ export interface RepondreResult {
   ficheResume: FicheResume | null;
   questionMetacognitive: QuestionMetacognitive | null;
   indice: string | null;
+  /** Erreur commise en se déclarant sûr : à signaler, la notion passe en tête des révisions. */
+  erreurAssuree?: boolean;
+  /** Bonne réponse « au hasard » : n'a pas compté pour la maîtrise. */
+  reussiteAuHasard?: boolean;
 }
 
 export function useQcmNext(notionId: string | undefined) {
@@ -46,8 +50,8 @@ export function useQcmNext(notionId: string | undefined) {
 
 export function useSubmitQcm() {
   return useMutation({
-    mutationFn: ({ attemptToken, reponseDonnee }: { attemptToken: string; reponseDonnee: string }) =>
-      api.post<RepondreResult>("/api/eleve/qcm/repondre", { attemptToken, reponseDonnee }),
+    mutationFn: ({ attemptToken, reponseDonnee, confiance }: { attemptToken: string; reponseDonnee: string; confiance: Confiance }) =>
+      api.post<RepondreResult>("/api/eleve/qcm/repondre", { attemptToken, reponseDonnee, confiance }),
   });
 }
 
