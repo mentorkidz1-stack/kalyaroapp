@@ -36,8 +36,8 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/qcm/repondre", async (request) => {
-    const { attemptToken, reponseDonnee } = submitQcmAnswerSchema.parse(request.body);
-    return progressionService.submitQcmAnswer(request.user.id, attemptToken, reponseDonnee);
+    const { attemptToken, reponseDonnee, confiance } = submitQcmAnswerSchema.parse(request.body);
+    return progressionService.submitQcmAnswer(request.user.id, attemptToken, reponseDonnee, confiance);
   });
 
   fastify.get("/qcm/tentatives/:id/indice", async (request) => {
@@ -51,8 +51,12 @@ export default async function progressionRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/saisie-libre/repondre", async (request) => {
-    const { questionSaisieLibreId, reponseDonnee } = submitFreeAnswerSchema.parse(request.body);
-    return progressionService.submitFreeAnswer(request.user.id, questionSaisieLibreId, reponseDonnee);
+    const { questionSaisieLibreId, reponseDonnee, confiance } = submitFreeAnswerSchema.parse(request.body);
+    return progressionService.submitFreeAnswer(request.user.id, questionSaisieLibreId, reponseDonnee, confiance);
+  });
+
+  fastify.get("/lucidite", async (request) => {
+    return progressionService.getLucidite(request.user.id);
   });
 
   fastify.get("/revisions/dues", async (request) => {

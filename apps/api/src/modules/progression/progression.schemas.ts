@@ -6,14 +6,19 @@ export const diagnosticIdParamSchema = z.object({ id: z.string().cuid() });
 export const tentativeIdParamSchema = z.object({ id: z.string().cuid() });
 export const matiereIdParamSchema = z.object({ matiereId: z.string().cuid() });
 
+/** Confiance déclarée avant de valider (chantier 3.1). Facultative pour les anciens clients. */
+const confianceSchema = z.enum(["SUR", "HESITE", "HASARD"]).optional();
+
 export const submitQcmAnswerSchema = z.object({
   attemptToken: z.string().min(1),
   reponseDonnee: z.string().min(1),
+  confiance: confianceSchema,
 });
 
 export const submitFreeAnswerSchema = z.object({
   questionSaisieLibreId: z.string().cuid(),
   reponseDonnee: z.string().min(1),
+  confiance: confianceSchema,
 });
 
 export const submitDiagnosticInitialSchema = z.object({

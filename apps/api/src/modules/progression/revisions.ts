@@ -29,15 +29,19 @@ export interface NotionDue {
   /** Nombre d'erreurs QCM récentes sur cette notion. */
   nbEchecsRecents: number;
   prochaineRevisionAt: Date;
+  /** Erreur commise « sûr » pas encore rattrapée (chantier 3.1) : passe en tête. */
+  erreurAssuree?: boolean;
 }
 
 /**
- * Erreurs les plus récentes d'abord (au jour près), puis les plus nombreuses, puis la
+ * Erreurs commises en se déclarant sûr d'abord (les plus importantes à corriger), puis
+ * erreurs les plus récentes (au jour près), puis les plus nombreuses, puis la
  * révision la plus en retard. Le tri au jour près laisse le nombre d'erreurs départager
  * deux notions ratées le même jour.
  */
 export function trierNotionsDues<T extends NotionDue>(notions: T[]): T[] {
   return [...notions].sort((a, b) => {
+    if (!!a.erreurAssuree !== !!b.erreurAssuree) return a.erreurAssuree ? -1 : 1;
     const jourA = a.dernierEchecAt ? beninDayKey(a.dernierEchecAt) : "";
     const jourB = b.dernierEchecAt ? beninDayKey(b.dernierEchecAt) : "";
     if (jourA !== jourB) return jourA < jourB ? 1 : -1;

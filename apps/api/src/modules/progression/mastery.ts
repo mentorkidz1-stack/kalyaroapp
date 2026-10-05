@@ -11,8 +11,12 @@ import { prochaineRevisionDans } from "./revisions.js";
 //  - Une réponse juste AVANT l'échéance de révision est un simple entraînement : elle ne fait
 //    pas monter de niveau (sinon on mesurerait à nouveau la mémoire à court terme).
 //  - Un échec fait redescendre d'UN niveau et remet l'intervalle à 1 jour.
+//  - Confiance déclarée (chantier 3.1) : une bonne réponse « au hasard » ne compte pas (rien
+//    ne bouge) ; une erreur commise « sûr » est marquée pour passer en tête des révisions,
+//    jusqu'à la prochaine réussite qui compte.
 
 export type NiveauMaitrise = "NON_VU" | "FRAGILE" | "ACQUIS_DU_JOUR" | "CONSOLIDE" | "DURABLE";
+export type Confiance = "SUR" | "HESITE" | "HASARD";
 
 export const REUSSITES_POUR_ACQUIS = 3;
 export const JOURS_MIN_POUR_CONSOLIDE = 1;
@@ -41,6 +45,8 @@ export interface EtatProgression {
   prochaineRevisionAt: Date | null;
   /** Dernière réponse, quelle qu'elle soit : sert à savoir si une série a lieu « dans la journée ». */
   derniereTentativeAt: Date | null;
+  /** Erreur commise en se déclarant sûr, pas encore rattrapée : priorité en révision. */
+  erreurAssureeAt?: Date | null;
 }
 
 function joursEntre(a: Date, b: Date): number {
@@ -49,6 +55,17 @@ function joursEntre(a: Date, b: Date): number {
 }
 
 export function computeNextProgression(
+  state: EtatProgression,
+  { correcte, now, confiance }: { correcte: boolean; now: Date; confiance?: Confiance | null }
+): EtatProgression {
+  // Trouvé au hasard : ni progrès, ni série, ni calendrier — seule la date d'activité change.
+  if (correcte && confiance === "HASARD") return { ...state, derniereTentativeAt: now };
+  const suivant = progressionSansConfiance(state, { correcte, now });
+  if (!correcte) return { ...suivant, erreurAssureeAt: confiance === "SUR" ? now : (state.erreurAssureeAt ?? null) };
+  return { ...suivant, erreurAssureeAt: null };
+}
+
+function progressionSansConfiance(
   state: EtatProgression,
   { correcte, now }: { correcte: boolean; now: Date }
 ): EtatProgression {

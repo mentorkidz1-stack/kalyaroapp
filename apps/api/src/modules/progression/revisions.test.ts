@@ -63,6 +63,14 @@ describe("trierNotionsDues", () => {
     expect(tri.map((n) => n.notionId)).toEqual(["hier-4", "hier-1", "ancienne", "jamais-ratee"]);
   });
 
+  it("met en tête une erreur commise en se déclarant sûr", () => {
+    const tri = trierNotionsDues([
+      notion({ notionId: "hier-4", dernierEchecAt: new Date("2026-10-06T08:00:00Z"), nbEchecsRecents: 4 }),
+      notion({ notionId: "sur-mais-faux", dernierEchecAt: new Date("2026-10-01T10:00:00Z"), nbEchecsRecents: 1, erreurAssuree: true }),
+    ]);
+    expect(tri.map((n) => n.notionId)).toEqual(["sur-mais-faux", "hier-4"]);
+  });
+
   it("départage à égalité par la révision la plus en retard", () => {
     const tri = trierNotionsDues([
       notion({ notionId: "recente", prochaineRevisionAt: new Date("2026-10-06T23:00:00Z") }),

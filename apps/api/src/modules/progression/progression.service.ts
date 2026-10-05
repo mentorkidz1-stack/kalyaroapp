@@ -14,7 +14,8 @@ import { corrigerReponseFigure, libelleReponseDonnee, reponseAttendueSchema } fr
 import { recordDailyActivity, projectCurrentStreak } from "../../lib/streak.js";
 import { signQcmAttemptToken, verifyQcmAttemptToken, type QcmAttemptTokenPayload } from "./attempt-token.js";
 import { estimerDureeMinutes, planifierSeance, prochaineRevisionDans, trierNotionsDues } from "./revisions.js";
-import { computeNextProgression, estAcquise } from "./mastery.js";
+import { computeNextProgression, estAcquise, type Confiance } from "./mastery.js";
+import { calculerLucidite } from "./lucidite.js";
 import { choisirQuestionSuivante, racineDe } from "./selection-qcm.js";
 
 const FICHE_RESUME_FAILURE_THRESHOLD = 3;
@@ -200,7 +201,12 @@ async function createMetacognitiveQuestion(tentative: TentativeEleve, payload: Q
   return { id: metacog.id, enonce: metacog.enonce, tentativeId: tentative.id };
 }
 
-export const submitQcmAnswer = async (eleveId: string, attemptToken: string, reponseDonnee: string) => {
+export const submitQcmAnswer = async (
+  eleveId: string,
+  attemptToken: string,
+  reponseDonnee: string,
+  confiance: Confiance | null = null
+) => {
   const payload = verifyQcmAttemptToken(attemptToken);
   if (payload.eleveId !== eleveId) throw new AppError("Ce jeton n'appartient pas à cet élève", 403);
 
@@ -237,6 +243,7 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
       questionQcmId: payload.questionQcmId,
       reponseDonnee,
       correcte,
+      confiance,
       tentativeNumero: previousAttemptsCount + 1,
     },
   });
@@ -249,7 +256,7 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
   });
 
   const statutPrecedent = progression.statut;
-  const suivant = computeNextProgression(progression, { correcte, now: new Date() });
+  const suivant = computeNextProgression(progression, { correcte, now: new Date(), confiance });
   const statut = suivant.statut;
   const nbEchecs = suivant.nbEchecsConsecutifs;
 
@@ -263,6 +270,7 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
       derniereRevisionAt: suivant.derniereRevisionAt,
       prochaineRevisionAt: suivant.prochaineRevisionAt,
       derniereTentativeAt: suivant.derniereTentativeAt,
+      erreurAssureeAt: suivant.erreurAssureeAt ?? null,
     },
   });
 
@@ -306,6 +314,10 @@ export const submitQcmAnswer = async (eleveId: string, attemptToken: string, rep
     ficheResume,
     questionMetacognitive,
     indice: null,
+    // Confiance (chantier 3.1) : erreur commise « sûr » à signaler ; réussite « au hasard »
+    // qui n'a pas compté pour la maîtrise.
+    erreurAssuree: !correcte && confiance === "SUR",
+    reussiteAuHasard: correcte && confiance === "HASARD",
   };
 };
 
@@ -370,7 +382,8 @@ export const getNextSaisieLibre = async (eleveId: string, notionId: string) => {
 export const submitFreeAnswer = async (
   eleveId: string,
   questionSaisieLibreId: string,
-  reponseDonnee: string
+  reponseDonnee: string,
+  confiance: Confiance | null = null
 ) => {
   const question = await prisma.questionSaisieLibre.findUnique({ where: { id: questionSaisieLibreId } });
   if (!question) throw new AppError("Question introuvable", 404);
@@ -391,6 +404,7 @@ export const submitFreeAnswer = async (
       questionSaisieLibreId,
       reponseDonnee,
       correcte: evaluation.valide,
+      confiance,
       evaluationIa: evaluation,
       tentativeNumero: previousAttemptsCount + 1,
     },
@@ -401,6 +415,46 @@ export const submitFreeAnswer = async (
 };
 
 // ---- Révision espacée ----
+
+/**
+ * Indice de lucidité par matière (chantier 3.1) : réponses QCM et saisie libre où l'élève a
+ * déclaré sa confiance. Une matière sans aucune réponse déclarée n'apparaît pas.
+ */
+export const getLucidite = async (eleveId: string) => {
+  const matiereIds = await getAccessibleMatiereIds(eleveId);
+  if (matiereIds.length === 0) return [];
+  const tentatives = await prisma.tentativeEleve.findMany({
+    where: {
+      eleveId,
+      confiance: { not: null },
+      correcte: { not: null },
+      OR: [
+        { questionQcm: { chapitre: { cours: { matiereId: { in: matiereIds } } } } },
+        { questionSaisieLibre: { chapitre: { cours: { matiereId: { in: matiereIds } } } } },
+      ],
+    },
+    select: {
+      confiance: true,
+      correcte: true,
+      questionQcm: { select: { chapitre: { select: { cours: { select: { matiere: { select: { id: true, matiereScolaire: { select: { nom: true } }, ueMatiere: { select: { nom: true } } } } } } } } } },
+      questionSaisieLibre: {
+        select: { chapitre: { select: { cours: { select: { matiere: { select: { id: true, matiereScolaire: { select: { nom: true } }, ueMatiere: { select: { nom: true } } } } } } } } },
+      },
+    },
+  });
+  const parMatiere = new Map<string, { nom: string; reponses: { confiance: Confiance; correcte: boolean }[] }>();
+  for (const t of tentatives) {
+    const matiere = (t.questionQcm ?? t.questionSaisieLibre)?.chapitre.cours.matiere;
+    if (!matiere || !t.confiance || t.correcte === null) continue;
+    const nom = matiere.ueMatiere?.nom ?? matiere.matiereScolaire?.nom ?? "Matière";
+    const groupe = parMatiere.get(matiere.id) ?? { nom, reponses: [] };
+    groupe.reponses.push({ confiance: t.confiance, correcte: t.correcte });
+    parMatiere.set(matiere.id, groupe);
+  }
+  return [...parMatiere.entries()]
+    .map(([matiereId, g]) => ({ matiereId, matiereNom: g.nom, ...calculerLucidite(g.reponses) }))
+    .sort((a, b) => a.matiereNom.localeCompare(b.matiereNom, "fr"));
+};
 
 export const getDueRevisions = async (eleveId: string, now = new Date()) => {
   const matiereIds = await getAccessibleMatiereIds(eleveId);
@@ -455,6 +509,7 @@ export const getDueRevisions = async (eleveId: string, now = new Date()) => {
       dernierEchecAt: echecsParNotion.get(p.notionId)?.dernier ?? null,
       nbEchecsRecents: echecsParNotion.get(p.notionId)?.nb ?? 0,
       prochaineRevisionAt: p.prochaineRevisionAt!,
+      erreurAssuree: p.erreurAssureeAt !== null,
     }))
   );
   const seance = planifierSeance(notions);

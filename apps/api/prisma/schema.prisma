@@ -560,6 +560,13 @@ model PassageEpreuve {
 // SUIVI ÉLÈVE / MOTEUR DE MAÎTRISE
 // ============================================================
 
+/// Confiance déclarée par l'élève avant de valider une réponse (chantier 3.1).
+enum Confiance {
+  SUR
+  HESITE
+  HASARD
+}
+
 model TentativeEleve {
   id                    String             @id @default(cuid())
   eleveId               String             @map("eleve_id")
@@ -595,6 +602,8 @@ model TentativeEleve {
   /// après coup pour ne pas faire attendre l'élève sur l'appel IA avant de savoir s'il a
   /// juste ou faux.
   indice                String?
+  /// Confiance déclarée avant de valider (chantier 3.1) ; null pour les épreuves et l'historique.
+  confiance             Confiance?
 
   reponsesMetacognitives ReponseMetacognitive[]
 
@@ -629,6 +638,8 @@ model ProgressionNotion {
   /// Dernière réponse, juste ou fausse : sert à savoir si une série de réussites a lieu
   /// dans la même journée (heure du Bénin).
   derniereTentativeAt     DateTime?             @map("derniere_tentative_at")
+  /// Erreur commise en se déclarant « sûr », pas encore rattrapée : notion en tête des révisions.
+  erreurAssureeAt         DateTime?             @map("erreur_assuree_at")
 
   @@unique([eleveId, notionId])
   @@map("progressions_notion")

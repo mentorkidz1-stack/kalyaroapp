@@ -212,3 +212,30 @@ describe("garanties", () => {
     expect(estAcquise("DURABLE")).toBe(true);
   });
 });
+
+describe("confiance déclarée (chantier 3.1)", () => {
+  it("une bonne réponse « au hasard » ne fait rien progresser", () => {
+    const depart = etat({ statut: "FRAGILE", nbSuccesConsecutifs: 2, derniereTentativeAt: J0 });
+    const s = computeNextProgression(depart, { correcte: true, now: J0, confiance: "HASARD" });
+    expect(s.statut).toBe("FRAGILE");
+    expect(s.nbSuccesConsecutifs).toBe(2);
+    expect(s.prochaineRevisionAt).toEqual(depart.prochaineRevisionAt);
+  });
+
+  it("« sûr » mais faux : erreur marquée, effacée par la prochaine réussite qui compte", () => {
+    const rate = computeNextProgression(etat(), { correcte: false, now: J0, confiance: "SUR" });
+    expect(rate.statut).toBe("FRAGILE");
+    expect(rate.erreurAssureeAt).toEqual(J0);
+    const encoreRate = computeNextProgression(rate, { correcte: false, now: J0, confiance: "HESITE" });
+    expect(encoreRate.erreurAssureeAt).toEqual(J0);
+    const auHasard = computeNextProgression(encoreRate, { correcte: true, now: J0, confiance: "HASARD" });
+    expect(auHasard.erreurAssureeAt).toEqual(J0);
+    const rattrape = computeNextProgression(auHasard, { correcte: true, now: J0, confiance: "HESITE" });
+    expect(rattrape.erreurAssureeAt).toBeNull();
+  });
+
+  it("sans confiance déclarée, le comportement historique est inchangé", () => {
+    const s = computeNextProgression(etat(), { correcte: false, now: J0 });
+    expect(s.erreurAssureeAt).toBeNull();
+  });
+});
