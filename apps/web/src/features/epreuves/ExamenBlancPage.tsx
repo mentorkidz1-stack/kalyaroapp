@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { AppHeader } from "../../components/AppHeader";
 import { Button, Card, ClavierMaths, ErrorState, LoadingState, MathText, FigureRenderer } from "../../design-system";
-import { RapportView, formatPoints, sousTitreEpreuve, titreEpreuve, type Passage, type Rapport } from "./rapport";
+import { ExtraitsSujet, RapportView, formatPoints, sousTitreEpreuve, titreEpreuve, type Passage, type Rapport } from "./rapport";
 import { BoutonPhotos, ConseilsPhoto, envoyerPhotos } from "./photos";
 
 /** Pages de copie photographiables au total (même plafond que l'API). */
@@ -464,6 +464,7 @@ export function ExamenBlancPage() {
               <div className="font-display text-[17px] leading-snug text-ink mb-4 whitespace-pre-wrap">
                 <MathText text={question.enonce} />
               </div>
+              <ExtraitsSujet passageId={passage.passageId} question={question} />
               {question.figure != null && <FigureRenderer figure={question.figure} />}
               {!tempsEcoule && (
                 <ClavierMaths

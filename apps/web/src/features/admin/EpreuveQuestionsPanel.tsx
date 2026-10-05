@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api-client";
 import { Badge, Button, MathText, Spinner, fieldInputClass } from "../../design-system";
 import { EditeurFigure } from "./EditeurFigure";
+import { ChoixSujetPdf, ImagesQuestion } from "./ExtraitsSujet";
+import type { DocumentPdf } from "./pdf-pages";
 
 interface NotionRef {
   id: string;
@@ -21,6 +23,8 @@ interface QuestionEpreuve {
   points: number;
   notionId: string | null;
   figure?: unknown;
+  /** Extraits du sujet (pages du PDF découpées), affichés avec l'énoncé. */
+  imageUrls: string[];
   corriges: CorrigeQuestion[];
 }
 interface QuestionsResponse {
@@ -83,6 +87,7 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
   const [modifie, setModifie] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pdf, setPdf] = useState<{ doc: DocumentPdf; nom: string } | null>(null);
 
   useEffect(() => {
     if (data && !modifie) setBrouillon(data.questions.map(versBrouillon));
@@ -183,6 +188,8 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
         </Button>
       </div>
 
+      {!modifie && brouillon.some((q) => q.id) && <ChoixSujetPdf pdf={pdf} onPdf={setPdf} />}
+
       {brouillon.length === 0 && (
         <p className="text-sm text-ink-soft">
           Épreuve non découpée : elle est proposée comme une seule question, notée avec les corrigés de l'épreuve ci-dessous.
@@ -239,6 +246,14 @@ export function EpreuveQuestionsPanel({ epreuveId, bareme }: { epreuveId: string
             placeholder="Consigne de la question"
           />
           <EditeurFigure valeur={q.figure} onChange={(figure, valide) => majFigure(q.cle, figure, valide)} />
+          {!modifie && q.id && (
+            <ImagesQuestion
+              questionId={q.id}
+              imageUrls={data?.questions.find((x) => x.id === q.id)?.imageUrls ?? []}
+              pdf={pdf?.doc ?? null}
+              queryKey={queryKey}
+            />
+          )}
           {!modifie && q.id && <CorrigesQuestion questionId={q.id} corriges={data?.questions.find((x) => x.id === q.id)?.corriges ?? []} epreuveId={epreuveId} />}
         </div>
       ))}

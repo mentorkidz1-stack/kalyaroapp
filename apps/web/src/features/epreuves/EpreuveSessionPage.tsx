@@ -10,6 +10,7 @@ import { QuestionQcmCorps } from "../qcm/QuestionQcmCorps";
 import {
   CorrectionView,
   RapportView,
+  ExtraitsSujet,
   formatPoints,
   sousTitreEpreuve,
   titreEpreuve,
@@ -230,6 +231,7 @@ export function EpreuveSessionPage() {
               <div className="font-display text-[17px] leading-snug text-ink mb-4 whitespace-pre-wrap">
                 <MathText text={question.enonce} />
               </div>
+              <ExtraitsSujet passageId={passage!.passageId} question={question} />
               {question.figure != null && <FigureRenderer figure={question.figure} />}
 
               {!correction && (

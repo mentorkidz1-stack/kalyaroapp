@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, FeedbackBlock, MathText, FigureRenderer } from "../../design-system";
+import { AuthedImage } from "../../components/AuthedImage";
 
 // Types et vues partagés par l'entraînement (EpreuveSessionPage) et l'examen blanc
 // (ExamenBlancPage) : correction d'une question et rapport final.
@@ -23,6 +25,35 @@ export interface QuestionPassage {
   imageUrls: string[];
   /** Figure dessinée par l'application (description JSON validée). */
   figure?: unknown;
+}
+
+/** Extraits du sujet papier rattachés à la question (schéma, tableau), sous l'énoncé.
+ * Toucher un extrait l'ouvre en grand (lisible sur un petit écran, défilement possible). */
+export function ExtraitsSujet({ passageId, question }: { passageId: string; question: QuestionPassage }) {
+  const [agrandi, setAgrandi] = useState<string | null>(null);
+  if (question.imageUrls.length === 0) return null;
+  const src = (cle: string) => `/api/eleve/passages/${passageId}/questions/${question.cle}/images/${cle}`;
+  const alt = (i: number) => `Extrait du sujet${question.imageUrls.length > 1 ? ` (${i + 1})` : ""} pour la question ${question.numero}`;
+  return (
+    <div className="my-3 space-y-2">
+      {question.imageUrls.map((cle, i) => (
+        <button key={cle} type="button" className="block w-full text-left" onClick={() => setAgrandi(cle)}>
+          <AuthedImage src={src(cle)} alt={alt(i)} fit="contain" className="w-full min-h-[80px] border border-line bg-white" />
+          <span className="block text-[11px] text-ink-soft mt-0.5">Touche l'image pour l'agrandir</span>
+        </button>
+      ))}
+      {agrandi && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col" role="dialog" aria-label="Extrait du sujet agrandi">
+          <button type="button" className="self-end m-3 px-3 py-1.5 rounded-[10px] bg-white text-sm font-bold" onClick={() => setAgrandi(null)}>
+            Fermer ✕
+          </button>
+          <div className="flex-1 overflow-auto p-2">
+            <AuthedImage src={src(agrandi)} alt={alt(question.imageUrls.indexOf(agrandi))} fit="contain" className="min-w-[160%] max-w-none bg-white" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export interface Passage {
@@ -298,6 +329,7 @@ export function RapportView({
                     <div className="text-sm text-ink whitespace-pre-wrap">
                       <MathText text={question.enonce} />
                     </div>
+                    <ExtraitsSujet passageId={passage.passageId} question={question} />
                     {question.figure != null && <FigureRenderer figure={question.figure} />}
                     <div className="bg-bg rounded-[10px] p-2.5 text-sm text-ink whitespace-pre-wrap">
                       <div className="text-[11px] font-mono uppercase text-ink-soft mb-1">
