@@ -4,6 +4,7 @@ import { AppError } from "../../plugins/error-handler.js";
 import {
   epreuveIdParamSchema,
   passageIdParamSchema,
+  imageQuestionPassageParamSchema,
   questionParamSchema,
   repondreQuestionSchema,
   demarrerPassageSchema,
@@ -46,6 +47,15 @@ export default async function passagesRoutes(fastify: FastifyInstance) {
     const { epreuveId } = epreuveIdParamSchema.parse(request.params);
     const { mode } = demarrerPassageSchema.parse(request.body ?? {});
     return reply.code(201).send(await passagesService.demarrerPassage(request.user.id, epreuveId, mode));
+  });
+
+  // Extrait du sujet rattaché à une question : visible seulement dans un passage de l'étudiant.
+  fastify.get("/passages/:passageId/questions/:questionId/images/:cle", async (request, reply) => {
+    const { passageId, questionId, cle } = imageQuestionPassageParamSchema.parse(request.params);
+    const { stream, contentType } = await passagesService.imageDeQuestion(request.user.id, passageId, questionId, cle);
+    reply.header("Content-Type", contentType);
+    reply.header("Cache-Control", "private, max-age=3600");
+    return reply.send(stream);
   });
 
   fastify.get("/passages/:passageId", async (request) => {

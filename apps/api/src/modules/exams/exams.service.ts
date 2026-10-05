@@ -4,6 +4,7 @@ import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
 import { extractPdfText } from "../../lib/pdf-upload.js";
 import { figureIaValide, figurePourPrisma } from "../../lib/figures.js";
+import { deleteImageFile, getImageContentType, getImageFileStream, modeStockageImages, saveImageFile } from "../../lib/image-upload.js";
 
 async function extractPdfTextOrThrow(buffer: Buffer): Promise<string> {
   let text: string;
@@ -84,7 +85,9 @@ export const updateEpreuve = async (
 export const deleteEpreuve = async (id: string) => {
   const existing = await prisma.epreuve.findUnique({ where: { id } });
   if (!existing) throw new AppError("Épreuve introuvable", 404);
+  const questions = await prisma.questionEpreuve.findMany({ where: { epreuveId: id }, select: { imageUrls: true } });
   await prisma.epreuve.delete({ where: { id } });
+  await supprimerImages(questions.flatMap((q) => q.imageUrls));
 };
 
 // ---- Corrigés-types ----
@@ -212,7 +215,7 @@ export const remplacerQuestionsEpreuve = async (
       throw new AppError("Une notion choisie n'appartient pas à la matière de cette épreuve", 400);
     }
   }
-  const existantes = await prisma.questionEpreuve.findMany({ where: { epreuveId }, select: { id: true } });
+  const existantes = await prisma.questionEpreuve.findMany({ where: { epreuveId }, select: { id: true, imageUrls: true } });
   const idsExistants = new Set(existantes.map((q) => q.id));
   const idsConserves = questions.map((q) => q.id).filter((id): id is string => !!id);
   if (idsConserves.some((id) => !idsExistants.has(id))) {
@@ -235,7 +238,55 @@ export const remplacerQuestionsEpreuve = async (
       else await tx.questionEpreuve.create({ data: { ...data, epreuveId } });
     }
   });
+  // Images des questions retirées : supprimées après coup (un échec ne bloque pas le découpage).
+  const conserves = new Set(idsConserves);
+  await supprimerImages(existantes.filter((q) => !conserves.has(q.id)).flatMap((q) => q.imageUrls));
   return listQuestionsEpreuve(epreuveId);
+};
+
+// ---- Images des questions (pages du sujet découpées dans le navigateur de l'admin) ----
+
+/** Une question affiche au plus quelques extraits du sujet (schéma, tableau, texte long). */
+export const MAX_IMAGES_PAR_QUESTION = 4;
+
+const supprimerImages = async (cles: string[]) => {
+  await Promise.all(cles.map((cle) => deleteImageFile(cle).catch(() => undefined)));
+};
+
+export const ajouterImageQuestion = async (questionId: string, image: { buffer: Buffer; extension: "png" | "jpg" | "webp" }) => {
+  if (!modeStockageImages()) {
+    throw new AppError("Stockage des images non configuré (Cloudflare R2) : impossible d'ajouter une image", 503);
+  }
+  const question = await prisma.questionEpreuve.findUnique({ where: { id: questionId } });
+  if (!question) throw new AppError("Question introuvable", 404);
+  if (question.imageUrls.length >= MAX_IMAGES_PAR_QUESTION) {
+    throw new AppError(`Maximum ${MAX_IMAGES_PAR_QUESTION} images par question`, 400);
+  }
+  const { storedFilename } = await saveImageFile(`question-${question.numero}.${image.extension}`, image.buffer);
+  return prisma.questionEpreuve.update({
+    where: { id: questionId },
+    data: { imageUrls: { push: storedFilename } },
+    select: { id: true, imageUrls: true },
+  });
+};
+
+export const retirerImageQuestion = async (questionId: string, cle: string) => {
+  const question = await prisma.questionEpreuve.findUnique({ where: { id: questionId } });
+  if (!question || !question.imageUrls.includes(cle)) throw new AppError("Image introuvable", 404);
+  const misAJour = await prisma.questionEpreuve.update({
+    where: { id: questionId },
+    data: { imageUrls: question.imageUrls.filter((c) => c !== cle) },
+    select: { id: true, imageUrls: true },
+  });
+  await supprimerImages([cle]);
+  return misAJour;
+};
+
+/** Flux d'une image rattachée à une question (la clé doit appartenir à la question). */
+export const imageDeQuestion = async (questionId: string, cle: string) => {
+  const question = await prisma.questionEpreuve.findUnique({ where: { id: questionId }, select: { imageUrls: true } });
+  if (!question || !question.imageUrls.includes(cle)) throw new AppError("Image introuvable", 404);
+  return { stream: await getImageFileStream(cle), contentType: getImageContentType(cle) };
 };
 
 const normaliser = (s: string) =>

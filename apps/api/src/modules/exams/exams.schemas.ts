@@ -51,6 +51,11 @@ export const createEpreuvePdfFieldsSchema = z.object({
 
 // ---- Découpage en questions ----
 export const questionEpreuveIdParamSchema = z.object({ questionId: z.string().cuid() });
+/** Clé d'image stockée : uuid + nom assaini (jamais de chemin). */
+export const imageQuestionParamSchema = z.object({
+  questionId: z.string().cuid(),
+  cle: z.string().regex(/^[a-zA-Z0-9._-]{1,200}$/),
+});
 
 export const remplacerQuestionsSchema = z.object({
   questions: z

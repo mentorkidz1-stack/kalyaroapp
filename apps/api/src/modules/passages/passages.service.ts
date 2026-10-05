@@ -4,8 +4,7 @@ import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../plugins/error-handler.js";
 import { assertMatiereAccessible } from "../../lib/matiere-access.js";
 import { recordDailyActivity } from "../../lib/streak.js";
-import { deleteImageFile, saveImageFile } from "../../lib/image-upload.js";
-import { R2_BUCKET_NAME } from "../../lib/storage.js";
+import { deleteImageFile, getImageContentType, getImageFileStream, modeStockageImages, saveImageFile } from "../../lib/image-upload.js";
 import { startPrerequisiteDescent } from "../progression/progression.service.js";
 import { arrondirPoints, calculerRapport, estRatee, type QuestionBareme } from "./notation.js";
 import {
@@ -34,7 +33,7 @@ export interface PhotoCopie {
  * transcription est gardée. Un échec de stockage ne doit jamais faire perdre une correction.
  */
 async function stockerPhotos(photos: PhotoCopie[], prefixe: string): Promise<string[]> {
-  if (!process.env.R2_ENDPOINT || !R2_BUCKET_NAME) return [];
+  if (!modeStockageImages()) return [];
   try {
     const cles = [];
     for (const [i, p] of photos.entries()) {
@@ -45,6 +44,21 @@ async function stockerPhotos(photos: PhotoCopie[], prefixe: string): Promise<str
   } catch {
     return [];
   }
+}
+
+/** Extraits du sujet d'une question, pour le correcteur IA. Une image illisible est ignorée. */
+async function imagesDuSujet(cles: string[]): Promise<ImageEntree[]> {
+  const images: ImageEntree[] = [];
+  for (const cle of cles) {
+    try {
+      const morceaux: Buffer[] = [];
+      for await (const m of await getImageFileStream(cle)) morceaux.push(Buffer.from(m as Uint8Array));
+      images.push({ mimeType: getImageContentType(cle) as ImageEntree["mimeType"], base64: Buffer.concat(morceaux).toString("base64") });
+    } catch {
+      // Stockage indisponible : la correction se fait sur le texte seul.
+    }
+  }
+  return images;
 }
 
 const versImages = (photos: PhotoCopie[]): ImageEntree[] =>
@@ -349,6 +363,14 @@ export const demarrerPassage = async (eleveId: string, epreuveId: string, mode: 
   return vuePassage(await chargerPassage(eleveId, passage.id));
 };
 
+/** Image d'énoncé d'une question du passage (contrôle : passage de l'étudiant, image de la question). */
+export const imageDeQuestion = async (eleveId: string, passageId: string, questionId: string, cle: string) => {
+  const { questions } = await chargerPassage(eleveId, passageId);
+  const question = questions.find((q) => q.questionEpreuveId === questionId);
+  if (!question || !question.imageUrls.includes(cle)) throw new AppError("Image introuvable", 404);
+  return { stream: await getImageFileStream(cle), contentType: getImageContentType(cle) };
+};
+
 export const getPassage = async (eleveId: string, passageId: string) => {
   const charge = await chargerPassage(eleveId, passageId);
   const { passage } = charge;
@@ -373,16 +395,19 @@ async function noterEtEnregistrer(
   reponseDonnee: string,
   options: { depuisPhoto?: boolean; photos?: string[] } = {}
 ) {
-  const evaluation = await gradeExamAnswer({
-    parcours: epreuve.matiere.type,
-    contexteEpreuve: epreuve.questions.length > 0 ? epreuve.enonce : undefined,
-    numero: question.numero,
-    enonceQuestion: question.enonce,
-    pointsMax: question.points,
-    corriges: question.corrigesValides,
-    reponseEtudiant: reponseDonnee,
-    depuisPhoto: options.depuisPhoto,
-  });
+  const evaluation = await gradeExamAnswer(
+    {
+      parcours: epreuve.matiere.type,
+      contexteEpreuve: epreuve.questions.length > 0 ? epreuve.enonce : undefined,
+      numero: question.numero,
+      enonceQuestion: question.enonce,
+      pointsMax: question.points,
+      corriges: question.corrigesValides,
+      reponseEtudiant: reponseDonnee,
+      depuisPhoto: options.depuisPhoto,
+    },
+    { imagesSujet: await imagesDuSujet(question.imageUrls) }
+  );
   const pointsObtenus = arrondirPoints(evaluation.pointsObtenus, question.points);
   const ratee = estRatee(pointsObtenus, question.points);
   const evaluationIa: EvaluationIaEpreuve = {

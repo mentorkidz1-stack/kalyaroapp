@@ -54,7 +54,7 @@ Repères dans le code :
   l'application fonctionne avec les questions déjà publiées, mais les boutons « Générer par IA »
   et la correction des réponses libres renvoient une erreur explicite, et les indices après une
   erreur n'apparaissent pas.
-- Facultatif : un bucket **Cloudflare R2** pour l'upload des PDF et des photos de copies.
+- Facultatif : un bucket **Cloudflare R2** pour l'upload des PDF, des photos de copies et des extraits de sujet rattachés aux questions. En développement, sans R2, les images sont rangées dans `apps/api/uploads/` (ignoré par git) ; en production, R2 est indispensable pour les images (le disque de Render est effacé à chaque déploiement).
 
 ## Installation
 

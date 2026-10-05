@@ -1,7 +1,7 @@
 import { BASE_SYSTEM_INSTRUCTIONS, consignePublic } from "./shared.js";
 import type { GradeExamAnswerInput } from "../schemas/grade-exam-answer.js";
 
-export function buildGradeExamAnswerPrompt(input: GradeExamAnswerInput) {
+export function buildGradeExamAnswerPrompt(input: GradeExamAnswerInput, nombreImagesSujet = 0) {
   const system = `${BASE_SYSTEM_INSTRUCTIONS}
 ${consignePublic(input.parcours)}
 
@@ -23,9 +23,13 @@ Format de sortie JSON attendu :
   const source = input.depuisPhoto
     ? "\n(Cette réponse est la transcription automatique d'une copie manuscrite photographiée : un symbole manifestement mal lu ou marqué [illisible] ne doit pas être lourdement pénalisé.)\n"
     : "";
+  const images =
+    nombreImagesSujet > 0
+      ? `\n(${nombreImagesSujet === 1 ? "L'image jointe est un extrait" : `Les ${nombreImagesSujet} images jointes sont des extraits`} du sujet papier pour cette question — schéma, tableau ou données : appuie-toi dessus pour comprendre l'énoncé.)\n`
+      : "";
   const prompt = `${contexte}Question ${input.numero} (notée sur ${input.pointsMax} points) :
 ${input.enonceQuestion}
-
+${images}
 ${corriges}
 
 Réponse de l'étudiant :${source}

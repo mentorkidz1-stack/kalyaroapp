@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const epreuveIdParamSchema = z.object({ epreuveId: z.string().cuid() });
 export const passageIdParamSchema = z.object({ passageId: z.string().cuid() });
+export const imageQuestionPassageParamSchema = z.object({
+  passageId: z.string().cuid(),
+  questionId: z.string().cuid(),
+  cle: z.string().regex(/^[a-zA-Z0-9._-]{1,200}$/),
+});
 export const questionParamSchema = z.object({
   passageId: z.string().cuid(),
   // Id d'une QuestionEpreuve, ou « unique » pour une épreuve non découpée.

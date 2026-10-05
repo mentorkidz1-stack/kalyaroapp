@@ -11,6 +11,7 @@ import {
   createCorrigePdfFieldsSchema,
   updateCorrigeSchema,
   questionEpreuveIdParamSchema,
+  imageQuestionParamSchema,
   remplacerQuestionsSchema,
   proposerDecoupageSchema,
   createCorrigeQuestionSchema,
@@ -39,6 +40,14 @@ interface CorrigeUploadBody {
 function isMultipartFile(value: unknown): value is MultipartFile {
   return !!value && typeof (value as MultipartFile).toBuffer === "function";
 }
+
+const EXTENSIONS_IMAGE: Record<string, "png" | "jpg" | "webp"> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+/** Extrait de page découpé et compressé dans le navigateur : quelques centaines de Ko. */
+const TAILLE_MAX_IMAGE = 3 * 1024 * 1024;
 
 export default async function examsRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.requireRole("ADMIN"));
@@ -160,6 +169,30 @@ export default async function examsRoutes(fastify: FastifyInstance) {
   fastify.post("/questions-epreuve/:questionId/corriges/generate-ia", async (request, reply) => {
     const { questionId } = questionEpreuveIdParamSchema.parse(request.params);
     return reply.code(201).send(await examsService.generateCorrigeQuestionIa(questionId, request.user.id));
+  });
+
+  // Extraits du sujet (pages du PDF découpées dans le navigateur) affichés avec la question.
+  fastify.post("/questions-epreuve/:questionId/images", async (request, reply) => {
+    const { questionId } = questionEpreuveIdParamSchema.parse(request.params);
+    const fichier = (request.body as { image?: unknown } | null)?.image;
+    if (!isMultipartFile(fichier)) throw new AppError("Image manquante (champ « image »)", 400);
+    const extension = EXTENSIONS_IMAGE[fichier.mimetype];
+    if (!extension) throw new AppError("L'image doit être au format png, jpeg ou webp", 400);
+    const buffer = await fichier.toBuffer();
+    if (buffer.length > TAILLE_MAX_IMAGE) throw new AppError("Image trop lourde (3 Mo maximum)", 400);
+    return reply.code(201).send(await examsService.ajouterImageQuestion(questionId, { buffer, extension }));
+  });
+
+  fastify.get("/questions-epreuve/:questionId/images/:cle", async (request, reply) => {
+    const { questionId, cle } = imageQuestionParamSchema.parse(request.params);
+    const { stream, contentType } = await examsService.imageDeQuestion(questionId, cle);
+    reply.header("Content-Type", contentType);
+    return reply.send(stream);
+  });
+
+  fastify.delete("/questions-epreuve/:questionId/images/:cle", async (request) => {
+    const { questionId, cle } = imageQuestionParamSchema.parse(request.params);
+    return examsService.retirerImageQuestion(questionId, cle);
   });
 
   fastify.patch("/corriges-questions/:id", async (request) => {
